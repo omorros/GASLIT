@@ -1,7 +1,7 @@
-# env / secrets
+# env / secrets — never commit real keys (template only: .env.example)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
 secrets/

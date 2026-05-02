@@ -28,7 +28,11 @@ def speak_dossier(text: str) -> bytes:
 
     client = _client()
     voice_id = os.environ.get("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
-    model_id = os.environ.get("ELEVENLABS_TTS_MODEL", DEFAULT_MODEL_ID)
+    model_id = (
+        os.environ.get("ELEVENLABS_TTS_MODEL")
+        or os.environ.get("ELEVENLABS_MODEL_ID")
+        or DEFAULT_MODEL_ID
+    )
     output_format = os.environ.get("ELEVENLABS_TTS_OUTPUT_FORMAT", DEFAULT_OUTPUT_FORMAT)
 
     audio = client.text_to_speech.convert(

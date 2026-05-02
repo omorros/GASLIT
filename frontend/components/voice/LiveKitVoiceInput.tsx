@@ -131,7 +131,11 @@ export function LiveKitVoiceInput({
       <section style={card}>
         <h3 style={{ margin: 0 }}>{title}</h3>
         <p style={{ color: "#f66" }}>{err}</p>
-        <p style={{ fontSize: 12 }}>Set LIVEKIT_* on the API and NEXT_PUBLIC_API_BASE if needed.</p>
+        <p style={{ fontSize: 12 }}>
+          Ensure <code>uvicorn</code> is running with <code>LIVEKIT_URL</code>, <code>LIVEKIT_API_KEY</code>,{" "}
+          <code>LIVEKIT_API_SECRET</code> in its <code>.env</code>. By default the UI calls the API via{" "}
+          <code>/backend</code> (Next proxy to :8002).
+        </p>
       </section>
     );
 

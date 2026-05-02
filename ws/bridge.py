@@ -6,7 +6,7 @@ Subscribes to:
   quarantine       (inserts → quarantine)
 
 Broadcasts JSON envelopes per docs/contracts.md §1 to every client connected on
-ws://0.0.0.0:WS_PORT (default 8001).
+ws://0.0.0.0:WS_PORT (default 8003; matches docs/contracts.md).
 
 Run:
   python ws/bridge.py
@@ -140,7 +140,7 @@ async def watch_quarantine(db) -> None:
 
 # ─── Main ─────────────────────────────────────────────────────────────
 async def main() -> None:
-    port = int(os.environ.get("WS_PORT", "8001"))
+    port = int(os.environ.get("WS_PORT", "8003"))
     uri = os.environ["MONGODB_URI"]
     client = AsyncIOMotorClient(uri)
     db = client[DB_NAME]

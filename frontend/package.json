@@ -13,6 +13,7 @@
     "@livekit/components-styles": "^1.1.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^16.6.1",
     "livekit-client": "^2.15.8",
     "lucide-react": "^1.14.0",
     "motion": "^12.38.0",

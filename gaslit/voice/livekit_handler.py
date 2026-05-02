@@ -18,7 +18,7 @@ def normalize_transcript(raw: str) -> str:
 
 
 def to_scribe_event(payload: VoiceInputPayload) -> dict:
-    """Shape consumed by Scribe pipeline (stub until gaslit.agents.scribe is wired)."""
+    """Normalize payload for `on_voice_transcript` → `scribe_turn`."""
     return {
         "transcript": normalize_transcript(payload.transcript),
         "source": payload.source or "livekit",

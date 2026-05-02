@@ -31,9 +31,15 @@ Loaded at process start by `python-dotenv` (`load_dotenv()` in every entry-point
 | `LIVEKIT_*` | Teammate 2 | cloud.livekit.io | ⏳ |
 | `ELEVENLABS_API_KEY` / `ELEVENLABS_AGENT_ID` | Teammate 2 | elevenlabs.io after redeeming hackathon coupon | ⏳ |
 
+## Gitignore (what blocks pushes)
+
+- **Root `.gitignore`:** ignores `.env` and `.env.*` (e.g. `.env.local`, `.env.production`), with **`!.env.example`** so only the template is committed.
+- **`frontend/.gitignore`:** the same idea for paths under `frontend/`.
+- **Pre-push check:** run `./scripts/check_no_tracked_env_secrets.sh` — fails if any tracked file looks like a real env file other than `.env.example`. Optional: wire as a Git `pre-commit` hook.
+
 ## Rules
 
-1. **`.env` never gets committed.** `git check-ignore .env` must always return `.env`. If it ever doesn't, `git rm --cached .env` and reset secrets.
+1. **`.env` never gets committed.** `git check-ignore -v .env` should show an ignore rule. If `.env` is ever tracked, run `git rm --cached .env`, rotate exposed keys, and confirm the rules above.
 2. **No secrets in code, fixtures, README, contracts, screenshots, demo videos.** Only `.env` references the actual values.
 3. **No secrets in chat after today.** The Anthropic key + DB password were shared in plain chat once during initial setup. Rotate both **on Sunday 3 May** (post-event).
 4. **Production substitution.** `HMAC_SECRET` lives in `.env` for the demo. In any deployed version: MongoDB Queryable Encryption (PRD §4.1).
