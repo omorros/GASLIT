@@ -1,0 +1,34 @@
+# GASLIT — NeMo Guardrails config (Teammate 1)
+#
+# CRITICAL INVARIANT (PRD §15 / TEAM_PLAN):
+#   The MINJA Turn 1 poison message MUST pass through this rail.
+#   MINJA looks indistinguishable from a benign business note. If Guardrails
+#   blocks it, the demo is dead (no divergence between unprotected vs gaslit).
+#
+# Strategy:
+#   * passthrough = true  → unmatched user inputs fall through to the LLM
+#                           instead of being rejected by colang flow matching.
+#   * Only one input rail: self_check_input. Its prompt (see prompts.yml)
+#     is narrow — it only blocks explicit prompt-injection / jailbreak
+#     attempts. Benign business statements always pass.
+#
+# Fallback model:
+#   Default ``config.yml`` uses Anthropic Haiku for the Rails' internal self-check
+#   (fast, stable CI). For Nemotron-only demos set ``GUARDRAILS_MAIN_ENGINE=nvidia``
+#   (uses ``variants/nvidia/config.yml`` + ``NVIDIA_API_KEY`` + ``langchain-openai``).
+
+models:
+  - type: main
+    engine: anthropic
+    model: claude-haiku-4-5-20251001
+
+rails:
+  input:
+    flows:
+      - self check input
+
+passthrough: True
+
+# Do not enable dialog rails. Passthrough mode skips flow matching.
+# Do not enable output rails. Belief-layer filtering is GASLIT's job
+# (Librarian + Sentinel + Forensic Auditor), not NeMo Guardrails.

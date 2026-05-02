@@ -29,10 +29,11 @@ TEST_THREAD = "t_smoketest"
 
 def main() -> int:
     db = MongoClient(os.environ["MONGODB_URI"])[DB_NAME]
+    expected_mid = deterministic_memory_id(TEST_USER, TEST_THREAD, 1)
 
     # Cleanup any prior smoke artefacts
     db[MEMORIES].delete_many({"user_id": TEST_USER})
-    db[BELIEF_PROVENANCE].delete_many({"memory_id": {"$regex": "^m_[a-f0-9]+$"}})
+    db[BELIEF_PROVENANCE].delete_many({"memory_id": expected_mid})
 
     # 1. Skip distil — write_memory directly so we don't burn an Anthropic call
     mem = write_memory(
@@ -44,7 +45,6 @@ def main() -> int:
         confidence=0.7,
     )
     mid = mem["memory_id"]
-    expected_mid = deterministic_memory_id(TEST_USER, TEST_THREAD, 1)
     assert mid == expected_mid, f"memory_id mismatch: {mid} vs {expected_mid}"
 
     # 2. Verify both collections wrote atomically

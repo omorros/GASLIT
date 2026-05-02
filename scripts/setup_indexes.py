@@ -34,7 +34,8 @@ def main() -> int:
     client = MongoClient(uri)
     db = client[DB_NAME]
 
-    print(f"[setup] db={DB_NAME} host={uri.split('@')[1].split('/')[0]}")
+    host = uri.split("@")[-1].split("/")[0] if "@" in uri else uri.split("//")[-1].split("/")[0]
+    print(f"[setup] db={DB_NAME} host={host}")
     bootstrap_collections(db)
     seed_agent_registry(db)
     print(f"[setup] collections: {sorted(db.list_collection_names())}")

@@ -41,6 +41,7 @@ from pydantic import BaseModel, Field
 from pymongo import MongoClient
 
 from gaslit.agents.scribe import scribe_turn
+from gaslit.embeddings import EmbeddingServiceError
 from gaslit.retrieval.librarian import (
     retrieve_with_audit, retrieve_unprotected,
 )
@@ -162,10 +163,13 @@ def unprotected_agent(req: AgentRequest):
     # Best-effort scribe; never blocks the chat path.
     scribe_turn(req.user_id, req.thread_id, req.turn_number, req.message)
 
-    memories = retrieve_unprotected(
-        req.message,
-        {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
-    )
+    try:
+        memories = retrieve_unprotected(
+            req.message,
+            {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
+        )
+    except EmbeddingServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     fired = (tool_name == "refund_request" and _looks_like_auto_approval(memories))
     response = (
@@ -187,10 +191,13 @@ def gaslit_agent(req: AgentRequest):
 
     scribe_turn(req.user_id, req.thread_id, req.turn_number, req.message)
 
-    audit = retrieve_with_audit(
-        req.message,
-        {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
-    )
+    try:
+        audit = retrieve_with_audit(
+            req.message,
+            {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
+        )
+    except EmbeddingServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     fired = (tool_name == "refund_request"
              and _looks_like_auto_approval(audit["memories"]))
@@ -260,3 +267,4 @@ _try_include("gaslit.adversary.minja_simulator", "router")
 _try_include("api.compliance_export", "router")
 _try_include("gaslit.agents.sentinel", "sentinel_router")
 _try_include("gaslit.voice.router", "voice_router")
+_try_include("api.demo_dashboard", "router")

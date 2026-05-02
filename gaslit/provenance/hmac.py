@@ -52,8 +52,13 @@ def sign(fields: dict[str, Any]) -> str:
 
 def verify(fields: dict[str, Any], attestation: str) -> bool:
     """Constant-time comparison of computed vs claimed attestation."""
-    expected = sign(fields)
-    return _hmac.compare_digest(expected, attestation)
+    try:
+        expected = sign(fields)
+        if len(attestation) != len(expected):
+            return False
+        return _hmac.compare_digest(expected, attestation)
+    except Exception:
+        return False
 
 
 # Field set used for signing — keep this stable. Adding a field is a forking change.
@@ -76,7 +81,7 @@ def signing_fields(memory: dict[str, Any], source_text_hash: str,
         "source_text_hash": source_text_hash,
         "tool_output_hashes": tool_output_hashes or [],
         "parent_memory_id": memory.get("parent_memory_id"),
-        "user_id": memory["user_id"],
-        "thread_id": memory["thread_id"],
-        "turn_number": memory["turn_number"],
+        "user_id": memory.get("user_id"),
+        "thread_id": memory.get("thread_id"),
+        "turn_number": memory.get("turn_number"),
     }

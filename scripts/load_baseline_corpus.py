@@ -22,8 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from pymongo.errors import BulkWriteError
 
+from gaslit.provenance.hmac import sha256_hex, sign, signing_fields
 from gaslit.schemas import MEMORIES, BELIEF_PROVENANCE, DB_NAME
 
 load_dotenv()
@@ -54,7 +54,6 @@ def main() -> int:
 
     now = datetime.now(timezone.utc)
     memory_docs = []
-    prov_docs = []
     for d in docs:
         memory_docs.append({
             "memory_id": d["memory_id"],
@@ -72,42 +71,44 @@ def main() -> int:
             "quarantined": d.get("quarantined", False),
             "written_at": now,
         })
-        p = d["_provenance"]
-        prov_docs.append({
-            "memory_id": p["memory_id"],
-            "source_text_hash": p["source_text_hash"],
-            "tool_output_hashes": p.get("tool_output_hashes", []),
-            "parent_memory_id": p.get("parent_memory_id"),
-            "attestation": p["attestation"],
-            "written_at": now,
-        })
 
     inserted_m = 0
-    inserted_p = 0
-    try:
-        if memory_docs:
-            r = db[MEMORIES].insert_many(memory_docs, ordered=False)
-            inserted_m = len(r.inserted_ids)
-    except BulkWriteError as e:
-        inserted_m = e.details.get("nInserted", 0)
-        n_dups = sum(1 for er in e.details.get("writeErrors", [])
-                     if er.get("code") == 11000)
-        print(f"[load] memories: {inserted_m} inserted, {n_dups} duplicates skipped")
+    refreshed_p = 0
+    for memory_doc, fixture_doc in zip(memory_docs, docs):
+        memory_result = db[MEMORIES].update_one(
+            {"memory_id": memory_doc["memory_id"]},
+            {"$setOnInsert": memory_doc},
+            upsert=True,
+        )
+        if memory_result.upserted_id is not None:
+            inserted_m += 1
 
-    try:
-        if prov_docs:
-            r = db[BELIEF_PROVENANCE].insert_many(prov_docs, ordered=False)
-            inserted_p = len(r.inserted_ids)
-    except BulkWriteError as e:
-        inserted_p = e.details.get("nInserted", 0)
-        n_dups = sum(1 for er in e.details.get("writeErrors", [])
-                     if er.get("code") == 11000)
-        print(f"[load] belief_provenance: {inserted_p} inserted, {n_dups} duplicates skipped")
+        live_memory = db[MEMORIES].find_one(
+            {"memory_id": memory_doc["memory_id"]}, {"_id": 0}
+        ) or memory_doc
+        tool_output_hashes = fixture_doc.get("_provenance", {}).get("tool_output_hashes", [])
+        source_text_hash = sha256_hex(live_memory["source_text"])
+        fields = signing_fields(live_memory, source_text_hash, tool_output_hashes)
+        provenance = {
+            "memory_id": live_memory["memory_id"],
+            "source_text_hash": source_text_hash,
+            "tool_output_hashes": tool_output_hashes,
+            "parent_memory_id": live_memory.get("parent_memory_id"),
+            "attestation": sign(fields),
+            "written_at": now,
+        }
+        prov_result = db[BELIEF_PROVENANCE].update_one(
+            {"memory_id": live_memory["memory_id"]},
+            {"$set": provenance},
+            upsert=True,
+        )
+        if prov_result.upserted_id is not None or prov_result.modified_count:
+            refreshed_p += 1
 
     n_m_total = db[MEMORIES].count_documents({})
     n_p_total = db[BELIEF_PROVENANCE].count_documents({})
     n_quar = db[MEMORIES].count_documents({"user_id": "u_2188"})
-    print(f"[load] inserted +{inserted_m} memories, +{inserted_p} provenance")
+    print(f"[load] inserted +{inserted_m} memories, refreshed {refreshed_p} provenance attestations")
     print(f"[load] totals: memories={n_m_total}, provenance={n_p_total}, u_2188 (poisoned author)={n_quar}")
     return 0
 

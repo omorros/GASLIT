@@ -1,0 +1,19 @@
+# NeMo Guardrails — Nemotron main LLM (OpenAI-compatible NVIDIA integrate API).
+#
+# Enable with: GUARDRAILS_MAIN_ENGINE=nvidia  (requires NVIDIA_API_KEY + langchain-openai).
+# Keeps the same input rail + prompts as ../config.yml; only the chat model changes.
+
+models:
+  - type: main
+    engine: openai
+    model: nvidia/nemotron-3-super-120b-a12b
+    api_key_env_var: NVIDIA_API_KEY
+    parameters:
+      base_url: https://integrate.api.nvidia.com/v1
+
+rails:
+  input:
+    flows:
+      - self check input
+
+passthrough: True

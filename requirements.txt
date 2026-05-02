@@ -17,6 +17,7 @@ langgraph-store-mongodb>=0.1.0
 langsmith>=0.1.140
 langchain-core>=0.3.0
 langchain-anthropic>=0.3.0
+langchain-openai>=0.3.0
 
 # ─── Web framework ─────────────────────────────────────────────────────
 fastapi>=0.115.0
@@ -30,8 +31,10 @@ python-dotenv>=1.0.0
 pydantic>=2.9.0
 numpy>=2.0.0
 
-# ─── Teammate 1 (NVIDIA Sentinel) — install on their machine, not Oriol's ──
-# nemoguardrails>=0.11.0   # needs C++ build tools on Windows; Teammate 1 manages
+# ─── Teammate 1 (NVIDIA Sentinel + AWS) ─────────────────────────────────
+nemoguardrails>=0.21.0
+boto3>=1.35.0
+botocore[crt]>=1.35.0
 
 # ─── Teammate 2 (Voice) — LiveKit + ElevenLabs ─────────────────────────────
 livekit-api>=0.8.0

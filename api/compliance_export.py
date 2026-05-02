@@ -15,6 +15,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
@@ -85,7 +86,7 @@ def compliance_export(quarantine_id: str):
 
     filename = f"GASLIT_Security_Incident_Report_{quarantine_id}.json"
     return JSONResponse(
-        content=bundle,
+        content=jsonable_encoder(bundle),
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
