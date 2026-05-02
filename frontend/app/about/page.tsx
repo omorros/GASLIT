@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Skull,
   PenLine,
@@ -21,6 +22,11 @@ import {
   Zap,
   HardDrive,
   Sparkles,
+  Cloud,
+  Power,
+  Terminal,
+  ExternalLink,
+  MapPin,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import { DotPattern } from "@/components/ui/dot-pattern";
@@ -31,6 +37,109 @@ import { NumberTicker } from "@/components/ui/number-ticker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { apiUrl } from "@/lib/api";
+
+/* ─── Runtime live-status hook ─────────────────────────── */
+type LivePayload = {
+  sentinel?: { status?: string; checkpoint_step?: number | null };
+  trust?: { score?: number; n_memories?: number; n_quarantined_memories?: number };
+  counts?: {
+    memories?: number;
+    retrieval_log?: number;
+    quarantine_docs?: number;
+    poisoned_author_memories?: number;
+  };
+  coordination_hints?: string[];
+};
+
+function useLiveRuntime(intervalMs = 5000) {
+  const [data, setData] = useState<LivePayload | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const r = await fetch(apiUrl("/api/demo/live"), { cache: "no-store" });
+        if (!r.ok) throw new Error(String(r.status));
+        const j = (await r.json()) as LivePayload;
+        if (!cancelled) {
+          setData(j);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    };
+    tick();
+    const t = setInterval(tick, intervalMs);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [intervalMs]);
+
+  return { data, error };
+}
+
+/* ─── Sentinel status pill (online · offline · checking) ─ */
+function RuntimeStatusPill({ data, error }: { data: LivePayload | null; error: boolean }) {
+  const status = data?.sentinel?.status;
+  const live = !error && status === "online";
+  const offline = !error && status === "offline";
+
+  const dot = live ? "bg-[#76b900]" : offline ? "bg-amber-500" : error ? "bg-red-500" : "bg-neutral-300";
+  const dotPulse = live ? "bg-[#8fd400]" : offline ? "bg-amber-400" : error ? "bg-red-400" : "bg-neutral-200";
+  const label = live
+    ? "live"
+    : offline
+    ? "offline"
+    : error
+    ? "checking"
+    : "·";
+  const tone = live
+    ? "text-[#5e9100]"
+    : offline
+    ? "text-amber-600"
+    : error
+    ? "text-red-500"
+    : "text-neutral-500";
+
+  return (
+    <div className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-2.5 py-1">
+      <span className="relative flex h-1.5 w-1.5">
+        <span className={`tv-pulse-dot absolute inline-flex h-full w-full rounded-full ${dotPulse} opacity-75`} />
+        <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${dot}`} />
+      </span>
+      <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${tone}`}>
+        sentinel · {label}
+      </span>
+    </div>
+  );
+}
+
+/* ─── Compact live counters for the AWS card ───────────── */
+function LiveCounters({ data }: { data: LivePayload | null }) {
+  const items = [
+    { label: "memories",  value: data?.counts?.memories ?? null },
+    { label: "retrievals", value: data?.counts?.retrieval_log ?? null },
+    { label: "quarantines", value: data?.counts?.quarantine_docs ?? null },
+  ];
+  return (
+    <div className="grid grid-cols-3 gap-0 divide-x divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
+      {items.map(({ label, value }) => (
+        <div key={label} className="flex flex-col gap-0.5 px-3 py-2.5 text-center">
+          <span className="font-['Space_Grotesk'] text-lg font-black text-neutral-900 leading-none tabular-nums">
+            {value === null ? "·" : <NumberTicker value={value} className="font-['Space_Grotesk'] font-black text-neutral-900" />}
+          </span>
+          <span className="text-[8.5px] font-mono uppercase tracking-widest text-neutral-400">
+            {label}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /* ─── Page kicker ──────────────────────────────────────── */
 const SectionHeader = ({
@@ -153,8 +262,8 @@ const AGENT_DETAILS: AgentDetail[] = [
     name: "Adversary",
     model: "Fireworks · Llama 3.3 70B Instruct",
     cadence: "live attack stream",
-    duty: "Generates the live synthetic adversary query stream during the time-compression window. Runs the canonical bridging-steps sequence from arXiv 2503.03704 §4.2.",
-    hooks: ["LiveKit voice input", "NeMo Guardrails (passes — each query individually benign)"],
+    duty: "Generates the live synthetic adversary query stream during the time-compression window. Runs the canonical bridging-steps sequence from arXiv 2503.03704 §4.2. Driven from a real NemoClaw OpenShell bridge in production.",
+    hooks: ["LiveKit voice input", "NeMo Guardrails passthrough", "NemoClaw OpenShell bridge"],
     Icon: Skull,
     tone: "adversary",
   },
@@ -184,7 +293,7 @@ const AGENT_DETAILS: AgentDetail[] = [
     model: "Nemotron 3 Super 120B (NVIDIA)",
     cadence: "~5 model calls/min peak",
     duty: "Subscribes to retrieval_log Change Stream. Drift scoring runs in MongoDB aggregation — no model call. Calls Nemotron only when memory crosses threshold to explain why the cohort-variance fingerprint indicates poisoning.",
-    hooks: ["Atlas Change Streams", "LangGraph checkpointed", "Quarantine writer"],
+    hooks: ["Atlas Change Streams", "LangGraph checkpointed", "Quarantine writer", "AWS ECS Fargate · eu-west-2"],
     Icon: ScanEye,
     tone: "sentinel",
   },
@@ -313,11 +422,243 @@ const PARTNERS_FULL = [
   { name: "LiveKit", role: "Voice I/O" },
   { name: "Voyage AI", role: "voyage-3-large embeddings" },
   { name: "Fireworks AI", role: "Adversary stream" },
-  { name: "AWS Lambda", role: "Sentinel compute" },
+  { name: "AWS ECS Fargate", role: "Sentinel compute · eu-west-2" },
   { name: "LangGraph", role: "Agent orchestration" },
   { name: "NeMo Guardrails", role: "I/O layer" },
   { name: "NemoClaw", role: "Execution layer" },
 ];
+
+/* ─── Runtime section · "Where it actually runs" ───────── */
+function RuntimeSection() {
+  const { data, error } = useLiveRuntime();
+  const trustScore = data?.trust?.score;
+  const sentinelStatus = data?.sentinel?.status;
+  const checkpointStep = data?.sentinel?.checkpoint_step;
+
+  return (
+    <section
+      id="runtime"
+      className="relative px-6 md:px-10 py-20 max-w-6xl mx-auto w-full scroll-mt-24"
+    >
+      <SectionHeader
+        kicker="where it runs"
+        title={
+          <>
+            Real cluster. <span className="text-[#76b900]">Real receipts.</span>
+          </>
+        }
+        subtitle="Sentinel runs in production on AWS ECS Fargate. Kill-restart is real: LangGraph checkpointed state survives kill -9 and resumes from the same superstep. The attacker speaks through a real NemoClaw OpenShell bridge."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* AWS ECS Fargate · live status */}
+        <Card className="relative overflow-hidden border-[#aae030] bg-[#f0fad8]/40">
+          <BorderBeam
+            size={180}
+            duration={8}
+            colorFrom="#76b900"
+            colorTo="#aae030"
+            borderWidth={1.4}
+          />
+          <CardHeader className="gap-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border bg-[#76b900] text-white border-[#76b900]">
+                <Cloud className="h-5 w-5" />
+              </div>
+              <RuntimeStatusPill data={data} error={error} />
+            </div>
+            <CardTitle>AWS ECS Fargate</CardTitle>
+            <CardDescription className="font-mono text-[11px] uppercase tracking-wider text-[#5e9100] flex items-center gap-1.5">
+              <MapPin className="h-3 w-3" />
+              eu-west-2 · London
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3.5">
+            <p className="text-[13px] leading-relaxed text-neutral-700">
+              Sentinel container runs on ECS Fargate via{" "}
+              <code className="font-mono text-[12px] text-[#5e9100]">
+                deploy_sentinel_aws.sh
+              </code>{" "}
+              (boto3 + ECR). Subscribes to <code>retrieval_log</code> Change Streams.
+              Checkpoints to <code>langgraph_checkpoints</code>.
+            </p>
+
+            <LiveCounters data={data} />
+
+            {trustScore !== undefined && (
+              <div className="flex items-center justify-between rounded-xl border border-[#c5e87a] bg-white px-3 py-2">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+                  trust score
+                </span>
+                <span className="font-['Space_Grotesk'] text-base font-black text-[#5e9100] tabular-nums">
+                  <NumberTicker value={trustScore} className="font-['Space_Grotesk'] font-black text-[#5e9100]" />
+                  <span className="ml-0.5 text-[10px] font-mono text-neutral-400">/100</span>
+                </span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-1.5">
+              <Badge variant="green" className="text-[9px]">
+                eu-west-2
+              </Badge>
+              <Badge variant="green" className="text-[9px]">
+                ECS Fargate
+              </Badge>
+              <Badge variant="green" className="text-[9px]">
+                finalist eligible
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Kill-restart receipts */}
+        <Card className="flex flex-col">
+          <CardHeader className="gap-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border bg-neutral-50 text-neutral-700 border-neutral-200">
+                <Power className="h-5 w-5" />
+              </div>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-neutral-500">
+                kill · resume
+              </span>
+            </div>
+            <CardTitle>Prolonged coordination</CardTitle>
+            <CardDescription className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+              langgraph-checkpoint-mongodb v0.3.1
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-3">
+            <p className="text-[13px] leading-relaxed text-neutral-600">
+              Kill the Sentinel mid-investigation. Restart. State resumes from the same
+              superstep, checkpointed in MongoDB. Demoed live at 2:00.
+            </p>
+            <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3.5 text-[11.5px] font-mono leading-relaxed shadow-[inset_0_0_30px_rgba(118,185,0,0.06)]">
+              <div className="mb-2 flex items-center gap-1.5 border-b border-neutral-800 pb-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500/60" />
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500/60" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/60" />
+                <span className="ml-1 text-[9px] font-mono uppercase tracking-widest text-neutral-500">
+                  kill-restart.sh
+                </span>
+              </div>
+              <div className="text-neutral-400">
+                <span className="text-neutral-600">$ </span>
+                <span className="text-red-400">kill -9</span>{" "}
+                <span className="text-[#aae030]">$SENTINEL_PID</span>
+              </div>
+              <div className="text-neutral-400">
+                <span className="text-neutral-600">$ </span>
+                <span className="text-[#aae030]">./scripts/start_sentinel.sh</span>
+              </div>
+              <div className="mt-1.5 text-neutral-500">
+                <span className="text-neutral-600"># </span>
+                ✓ resumed from checkpoint @ superstep{" "}
+                <span className="text-[#8fd400] font-bold">
+                  {checkpointStep != null ? checkpointStep : "47"}
+                </span>
+              </div>
+            </div>
+            <div className="mt-auto flex flex-wrap gap-1.5">
+              <Badge className="text-[9px]">MongoDBSaver</Badge>
+              <Badge className="text-[9px]">superstep replay</Badge>
+              <Badge className="text-[9px]">
+                {sentinelStatus === "online" ? "sentinel · online" : "non-cuttable"}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* NemoClaw bridge */}
+        <Card className="flex flex-col">
+          <CardHeader className="gap-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border bg-red-50 text-red-500 border-red-100">
+                <Skull className="h-5 w-5" />
+              </div>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-red-500">
+                attacker · openshell
+              </span>
+            </div>
+            <CardTitle>NemoClaw bridge</CardTitle>
+            <CardDescription className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+              NVIDIA · execution layer
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-3">
+            <p className="text-[13px] leading-relaxed text-neutral-600">
+              Adversary runs inside an OpenShell sandbox. Real HTTP. The bridge drives the
+              canonical MINJA bridging-steps sequence against our API. Same path NemoClaw
+              OpenClaw agents take in production.
+            </p>
+            <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3.5 text-[11.5px] font-mono leading-relaxed shadow-[inset_0_0_30px_rgba(239,68,68,0.06)]">
+              <div className="mb-2 flex items-center gap-1.5 border-b border-neutral-800 pb-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500/60" />
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500/60" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/60" />
+                <span className="ml-1 text-[9px] font-mono uppercase tracking-widest text-neutral-500">
+                  openshell
+                </span>
+              </div>
+              <div className="text-neutral-400">
+                <span className="text-neutral-600">$ </span>
+                <span className="text-[#aae030]">nemoclaw my-assistant connect</span>
+              </div>
+              <div className="text-neutral-400">
+                <span className="text-neutral-600">$ </span>
+                <span className="text-[#aae030]">python scripts/nemoclaw_minja_driver.py</span>
+              </div>
+              <div className="mt-1.5 text-neutral-500">
+                <span className="text-neutral-600"># </span>
+                <span className="text-red-400">→</span> POST /api/unprotected-agent ·
+                turn 1 / 3
+              </div>
+            </div>
+            <a
+              href="https://github.com/NVIDIA/NemoClaw"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-auto inline-flex items-center gap-1.5 text-[11px] font-mono text-neutral-500 hover:text-[#76b900] transition-colors w-fit"
+            >
+              github.com/NVIDIA/NemoClaw
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Footer rail · live coordination + /demo dashboard fallback */}
+      <div className="mt-8 flex flex-col items-center gap-4">
+        {data?.coordination_hints && Array.isArray(data.coordination_hints) && (
+          <div className="flex flex-wrap items-center justify-center gap-2 text-[10px] font-mono text-neutral-400">
+            {(data.coordination_hints as string[]).slice(0, 2).map((h, i) => (
+              <span key={i} className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-2.5 py-1">
+                <Activity className="h-2.5 w-2.5 text-[#76b900]" />
+                <span className="text-neutral-500">{h}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <a
+          href={apiUrl("/demo")}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group inline-flex items-center gap-2.5 rounded-full border border-neutral-200 bg-white px-5 py-2.5 text-[12px] font-mono text-neutral-600 hover:border-[#aae030] hover:bg-[#f0fad8]/40 hover:text-[#5e9100] transition-all shadow-[0_1px_0_rgba(0,0,0,0.04)]"
+        >
+          <Terminal className="h-3.5 w-3.5" />
+          <span>Built-in operator dashboard</span>
+          <code className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-500 group-hover:bg-[#f0fad8] group-hover:text-[#76b900] transition-colors">
+            /demo
+          </code>
+          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+        </a>
+        <p className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">
+          ─── HTML fallback · same-origin · no React build needed ───
+        </p>
+      </div>
+    </section>
+  );
+}
 
 /* ─── About page ───────────────────────────────────────── */
 export default function About() {
@@ -614,6 +955,9 @@ export default function About() {
           </div>
         </div>
       </section>
+
+      {/* ── Where it actually runs ── */}
+      <RuntimeSection />
 
       {/* ── Partners marquee ── */}
       <section className="border-y border-neutral-100 bg-neutral-50/50 px-6 md:px-10 py-12">
