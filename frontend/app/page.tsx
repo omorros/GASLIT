@@ -176,7 +176,7 @@ const PARTNERS = [
   "LiveKit",
   "Voyage AI",
   "Fireworks AI",
-  "AWS Lambda",
+  "AWS ECS Fargate · eu-west-2",
   "LangGraph",
   "NeMo Guardrails",
   "NemoClaw",
