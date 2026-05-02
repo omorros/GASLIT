@@ -30,10 +30,6 @@
 :root {
   --background: #ffffff;
   --foreground: #0a0a0a;
-  --gaslit-bg: #0a0a0b;
-  --gaslit-border: #2a2a2e;
-  --gaslit-accent: #c9a227;
-  --gaslit-text: #e8e6e3;
 }
 
 @layer base {

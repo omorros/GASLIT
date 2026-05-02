@@ -33,6 +33,5 @@ numpy>=2.0.0
 # ─── Teammate 1 (NVIDIA Sentinel) — install on their machine, not Oriol's ──
 # nemoguardrails>=0.11.0   # needs C++ build tools on Windows; Teammate 1 manages
 
-# ─── Teammate 2 (Voice) — LiveKit + ElevenLabs ─────────────────────────────
-livekit-api>=0.8.0
-elevenlabs>=1.50.0
+# ─── Teammate 2 (Voice) — install on their machine, not Oriol's ────────────
+# elevenlabs>=1.10.0       # Teammate 2 manages on the voice service host
