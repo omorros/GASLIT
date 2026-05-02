@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from gaslit.voice.backend_hooks import on_forensic_question, on_voice_transcript
 from gaslit.voice.conv_ai import build_public_config, get_agent_id
 from gaslit.voice.livekit_handler import VoiceInputPayload, to_scribe_event
-from gaslit.voice.tts import speak_dossier
+from gaslit.voice.tts import speak_dossier, synthesize
 
 voice_router = APIRouter(prefix="/api", tags=["voice"])
 
@@ -31,6 +31,10 @@ class ForensicQARequest(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=64_000)
+    persona: str = Field(
+        default="forensic",
+        description="adversary | narrator | forensic — selects ElevenLabs voice id",
+    )
 
 
 def _livekit_token(*, room: str, identity: str) -> tuple[str, str]:
@@ -91,16 +95,35 @@ async def forensic_qa(body: ForensicQARequest) -> JSONResponse:
     return JSONResponse({"answer": answer, "quarantine_id": body.quarantine_id})
 
 
+_VALID_PERSONAS = {"adversary", "narrator", "forensic"}
+
+
 @voice_router.post("/voice/tts")
 async def voice_tts(body: TTSRequest) -> Response:
-    """ElevenLabs Flash v2.5 — returns audio/mpeg bytes for dossier playback."""
+    """ElevenLabs Flash v2.5 — multi-persona TTS for the Operator Console.
+
+    `persona` selects which voice id to use:
+    - adversary: ELEVENLABS_VOICE_ADVERSARY (default Antoni)
+    - narrator:  ELEVENLABS_VOICE_NARRATOR (default Rachel)
+    - forensic:  ELEVENLABS_VOICE_FORENSIC | ELEVENLABS_VOICE_ID (default Adam, PRD-locked)
+    """
+    persona = body.persona.lower().strip() if body.persona else "forensic"
+    if persona not in _VALID_PERSONAS:
+        persona = "forensic"
     try:
-        mp3 = speak_dossier(body.text)
+        if persona == "forensic":
+            mp3 = speak_dossier(body.text)
+        else:
+            mp3 = synthesize(body.text, persona=persona)  # type: ignore[arg-type]
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"TTS failed: {e!s}") from e
-    return Response(content=mp3, media_type="audio/mpeg")
+    return Response(
+        content=mp3,
+        media_type="audio/mpeg",
+        headers={"X-GASLIT-Persona": persona},
+    )
 
 
 @voice_router.get("/voice/convai-config")

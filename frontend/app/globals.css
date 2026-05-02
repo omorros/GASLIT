@@ -169,3 +169,61 @@
   to   { transform: translateY(calc(-100% - var(--gap))); }
 }
 .animate-marquee-vertical { animation: marquee-vertical var(--duration) infinite linear; }
+
+/* ─── Operator Console — clean / new-age palette ───────────────────── */
+:root {
+  --op-bg: #f7f8f5;
+  --op-card: #ffffff;
+  --op-border: #e8eae3;
+  --op-border-strong: #d2d6c8;
+  --op-text: #18181b;
+  --op-text-dim: #6b7280;
+  --op-text-mute: #9ca3af;
+  --op-green: #76b900;
+  --op-green-bg: #f1f8e2;
+  --op-red: #dc2626;
+  --op-red-bg: #fef1f1;
+  --op-amber: #d97706;
+  --op-amber-bg: #fef5e7;
+  --op-blue: #2563eb;
+  --op-blue-bg: #eff5ff;
+}
+
+/* Spotlight focus ring (pulse for ~0.6s when an element becomes the focus) */
+@keyframes op-focus-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(118, 185, 0, 0.55); }
+  100% { box-shadow: 0 0 0 12px rgba(118, 185, 0, 0); }
+}
+.op-focus-pulse { animation: op-focus-pulse 0.85s ease-out 1; }
+
+/* Card slide-in from below */
+@keyframes op-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.op-slide-up { animation: op-slide-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* Number drop (used by money ledger) */
+@keyframes op-num-drop {
+  0% { transform: translateY(-50%); opacity: 0; }
+  60% { transform: translateY(2px); }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.op-num-drop { animation: op-num-drop 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* Subtle dim of inactive sections during spotlight */
+.op-dim { transition: opacity 0.35s ease; }
+.op-dim.is-dimmed { opacity: 0.55; }
+
+/* Heartbeat dot (used for "active agent" indicator) */
+@keyframes op-pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.55; }
+}
+.op-pulse-dot { animation: op-pulse-dot 1.4s ease-in-out infinite; }
+
+/* Smooth gauge climb */
+@keyframes op-bar-climb {
+  from { width: 0%; }
+}
+.op-bar-climb { animation: op-bar-climb 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }

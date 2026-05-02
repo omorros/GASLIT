@@ -88,12 +88,141 @@ export async function fetchLiveKitToken(room: string, identity: string) {
   return r.json() as Promise<{ token: string; url: string; room: string }>;
 }
 
-export async function postTTS(text: string): Promise<ArrayBuffer> {
+export type Persona = "adversary" | "narrator" | "forensic";
+
+export async function postTTS(
+  text: string,
+  persona: Persona = "forensic",
+): Promise<ArrayBuffer> {
   const r = await apiFetch(apiUrl("/api/voice/tts"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, persona }),
   });
   if (!r.ok) throw new Error(await r.text());
   return r.arrayBuffer();
+}
+
+export type AgentRequest = {
+  message: string;
+  user_id: string;
+  thread_id: string;
+  turn_number: number;
+  tool_name?: string;
+};
+
+export type AgentResponse = {
+  response: string;
+  retrieved_memories: Array<Record<string, unknown>>;
+  filtered_memories?: Array<Record<string, unknown>>;
+  tool_calls: Array<{ tool: string; amount?: number }>;
+  contract_applied?: string | null;
+  agent_id: "unprotected" | "gaslit";
+};
+
+export async function postUnprotectedAgent(req: AgentRequest): Promise<AgentResponse> {
+  const r = await apiFetch(apiUrl("/api/unprotected-agent"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export async function postGaslitAgent(req: AgentRequest): Promise<AgentResponse> {
+  const r = await apiFetch(apiUrl("/api/gaslit-agent"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export type TrustScore = {
+  score: number;
+  n_memories: number;
+  n_quarantined: number;
+  ts: string;
+};
+
+export async function getTrustScore(): Promise<TrustScore> {
+  const r = await apiFetch(apiUrl("/api/trust-score"));
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export type SentinelStatus = {
+  status: "online" | "offline" | "starting" | string;
+  mode: string;
+  run_id?: string;
+  superstep?: number;
+  cluster?: string | null;
+  service?: string | null;
+  note?: string;
+};
+
+export async function getSentinelStatus(): Promise<SentinelStatus> {
+  const r = await apiFetch(apiUrl("/api/sentinel-status"));
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export async function startSentinel(): Promise<SentinelStatus> {
+  const r = await apiFetch(apiUrl("/api/start-sentinel"), { method: "POST" });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export async function killSentinel(): Promise<SentinelStatus> {
+  const r = await apiFetch(apiUrl("/api/kill-sentinel"), { method: "POST" });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export type MinjaLaunch = {
+  attack_id: string;
+  status: string;
+  turns: number;
+};
+
+export async function launchMinja(narrationDelayMs = 1500): Promise<MinjaLaunch> {
+  const r = await apiFetch(apiUrl("/api/launch-minja-attack"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ narration_delay_ms: narrationDelayMs }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export type FloodLaunch = { run_id: string; duration_s: number; qps: number; source: string };
+
+export async function postScenarioFlood(
+  durationS = 15,
+  qps = 5,
+  source: "canned" | "live" = "canned",
+): Promise<FloodLaunch> {
+  const r = await apiFetch(apiUrl("/api/scenario/flood"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ duration_s: durationS, qps, source }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export async function postTriggerDrift(): Promise<unknown> {
+  const r = await apiFetch(apiUrl("/api/demo/trigger-drift"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export function complianceExportUrl(quarantineId: string): string {
+  return apiUrl(`/api/compliance-export/${encodeURIComponent(quarantineId)}`);
 }

@@ -250,6 +250,65 @@ def trust_score():
     }
 
 
+# ─── Scenario flood (Operator Console "Flood Mode") ──────────────────
+import uuid as _uuid
+
+_FLOOD_RUNS: dict[str, dict[str, Any]] = {}
+
+
+class FloodRequest(BaseModel):
+    duration_s: int = Field(default=15, ge=2, le=120)
+    qps: float = Field(default=5.0, ge=0.2, le=15.0)
+    source: str = Field(default="canned", pattern="^(canned|live)$")
+
+
+class FloodResponse(BaseModel):
+    run_id: str
+    duration_s: int
+    qps: float
+    source: str
+
+
+@app.post("/api/scenario/flood", response_model=FloodResponse, status_code=202)
+def scenario_flood(req: FloodRequest = FloodRequest()):
+    """Burst paired requests into both agents to drive cohort variance / drift.
+
+    Wraps `gaslit.adversary.live_traffic.stream_traffic` in a daemon thread.
+    Used by the Operator Console "Flood" scenario to make the drift gauge climb.
+    """
+    from gaslit.adversary.live_traffic import stream_traffic
+    run_id = f"flood_{_uuid.uuid4().hex[:8]}"
+    _FLOOD_RUNS[run_id] = {
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "duration_s": req.duration_s,
+        "qps": req.qps,
+        "source": req.source,
+        "status": "running",
+        "sent": 0,
+    }
+
+    def _run() -> None:
+        try:
+            sent = stream_traffic(req.duration_s, req.qps, source=req.source)
+            _FLOOD_RUNS[run_id]["sent"] = int(sent)
+            _FLOOD_RUNS[run_id]["status"] = "completed"
+        except Exception as exc:
+            _FLOOD_RUNS[run_id]["status"] = "error"
+            _FLOOD_RUNS[run_id]["error"] = repr(exc)
+        finally:
+            _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+    threading.Thread(target=_run, daemon=True, name=run_id).start()
+    return FloodResponse(
+        run_id=run_id, duration_s=req.duration_s, qps=req.qps, source=req.source,
+    )
+
+
+@app.get("/api/scenario/flood/{run_id}")
+def scenario_flood_status(run_id: str):
+    return _FLOOD_RUNS.get(run_id, {"status": "unknown"})
+
+
 # ─── Optional routers from teammates / sibling modules ────────────────
 def _try_include(import_path: str, attr: str = "router") -> bool:
     try:
