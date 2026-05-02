@@ -296,48 +296,6 @@ The Librarian reshapes the retrieval pipeline per query based on auto-classified
 
 ---
 
-## Why this wins, by judge
-
-### MongoDB judge (Pete Johnson and team)
-
-- **Eleven features**, every one load-bearing, listed and traceable to source files above.
-- **Prefilters on `(user_id, source_type, quarantined)`** before vector scoring. Standard hybrid-search-with-prefilter pattern.
-- **`$rankFusion` workaround** for 8.0.22 (we do not have 8.1+). Three parallel arms plus RRF in Python, mathematically equivalent, ~12 ms merge cost measured.
-- **Substrate consolidation**. The same documents are simultaneously a vector index, full-text index, provenance graph, event bus. One consistency model, one auth perimeter, zero ETL. For a security product, one auth boundary is itself a feature.
-- **Idempotent quarantine writes**. Key on `(memory_id, drift_bucket, sentinel_run_id)`. Replays after crash upsert idempotently.
-
-### NVIDIA judge
-
-- **Three NVIDIA primitives**, each doing visible, distinct work. NemoClaw OpenShell sandboxes the attacker. NeMo Guardrails wraps the customer-facing agent at the I/O layer. Nemotron 3 Super explains the threshold-cross.
-- The **layered defence story** is the thesis: NemoClaw and NeMo Guardrails are necessary but insufficient. GASLIT is the third layer NVIDIA's stack does not yet ship.
-- Nemotron is **rate-respectful**. Drift runs in MongoDB aggregation. Nemotron is called only on threshold cross. LRU cache on `(memory_id, drift_bucket)`. Stays under 40 RPM free tier.
-
-### LangChain / LangGraph judge
-
-- **`langgraph-checkpoint-mongodb` v0.3.1** as a checkpointer. `kill -9` then restart, investigation resumes from the same superstep, same dossier. **Demoed live on stage.**
-- **Tool calls are separate graph nodes**, each atomic. Crash mid-write: checkpoint has not advanced, replay from last safe state.
-- **LangSmith tracing** on the Forensic Auditor graph, visible during demo.
-
-### AWS judge
-
-- **AWS ECS Fargate** in `eu-west-2`, deployed via boto3 plus ECR. Bash one-liner: `gaslit/deploy/deploy_sentinel_aws.sh`.
-- **Container is the Sentinel.** No Lambda cold-start. Long-lived process subscribed to Change Streams, exactly the workload ECS Fargate exists for.
-- Same region as the MongoDB cluster (`eu-west-2`), so Change Stream latency is sub-50 ms.
-
-### ElevenLabs judge
-
-- **Flash v2.5 TTS** auto-plays the forensic dossier the moment quarantine fires. No voice cloning, system-generated text only.
-- **Conversational AI Agent** answers judges' spoken questions about an open quarantine in real time. Wired via the `ConvAIWidget` component on `/voice`.
-- Multi-language ready (Voyage 3 large is multilingual, ElevenLabs supports 70+ languages).
-
-### VC judge
-
-- **`pip install gaslit-shield`. Three lines of integration.** `@protected_agent(memory_store=mongodb_uri)` on any LangGraph agent class.
-- **Open-source core, paid compliance layer.** The SOC2 evidence export (`/api/compliance-export/{id}`) is the wedge. EMEA fintech is the GTM.
-- 30 deployments × $200K compliance spend = **$6M ARR wedge**, defensible bottom-up.
-
----
-
 ## Quickstart
 
 ### Prerequisites
