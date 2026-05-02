@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from gaslit.voice.backend_hooks import on_forensic_question, on_voice_transcript
-from gaslit.voice.conv_ai import build_public_config
+from gaslit.voice.conv_ai import build_public_config, get_agent_id
 from gaslit.voice.livekit_handler import VoiceInputPayload, to_scribe_event
 from gaslit.voice.tts import speak_dossier
 
@@ -41,7 +41,11 @@ def _livekit_token(*, room: str, identity: str) -> tuple[str, str]:
     if not key or not secret:
         raise HTTPException(
             status_code=503,
-            detail="LIVEKIT_API_KEY / LIVEKIT_API_SECRET not configured",
+            detail=(
+                "LIVEKIT_API_KEY / LIVEKIT_API_SECRET not configured. "
+                "Set them in repo-root .env (same folder as api/), restart uvicorn. "
+                "Check GET /api/voice/env-status for booleans."
+            ),
         )
 
     grants = api.VideoGrants(room_join=True, room=room)
@@ -54,7 +58,10 @@ def _livekit_token(*, room: str, identity: str) -> tuple[str, str]:
     jwt = at.to_jwt()
     url = os.environ.get("LIVEKIT_URL", "")
     if not url:
-        raise HTTPException(status_code=503, detail="LIVEKIT_URL not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="LIVEKIT_URL not configured in repo-root .env — restart uvicorn after fixing.",
+        )
     return jwt, url
 
 
@@ -100,3 +107,18 @@ async def voice_tts(body: TTSRequest) -> Response:
 async def convai_public_config() -> JSONResponse:
     """Non-secret Conv AI widget hints for the frontend."""
     return JSONResponse(build_public_config())
+
+
+@voice_router.get("/voice/env-status")
+async def voice_env_status() -> JSONResponse:
+    """Which voice-related env vars the API process sees (booleans only — no secrets)."""
+    return JSONResponse(
+        {
+            "repo_root_env_hint": "Put LIVEKIT_* and ELEVENLABS_* in repo-root .env (not only frontend/.env.local). Restart uvicorn after editing.",
+            "LIVEKIT_URL": bool(os.environ.get("LIVEKIT_URL", "").strip()),
+            "LIVEKIT_API_KEY": bool(os.environ.get("LIVEKIT_API_KEY", "").strip()),
+            "LIVEKIT_API_SECRET": bool(os.environ.get("LIVEKIT_API_SECRET", "").strip()),
+            "ELEVENLABS_API_KEY": bool(os.environ.get("ELEVENLABS_API_KEY", "").strip()),
+            "ELEVENLABS_AGENT_ID": bool((get_agent_id() or "").strip()),
+        }
+    )

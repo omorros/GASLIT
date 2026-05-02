@@ -1,19 +1,100 @@
 "use client";
 
 import Script from "next/script";
-import { createElement } from "react";
+import { createElement, useEffect, useState } from "react";
+import { fetchConvaiConfig, formatApiNetworkError } from "@/lib/api";
 
 /**
- * ElevenLabs Conversational AI embed — uses public agent id only (no API secret in client).
+ * ElevenLabs Conversational AI embed — agent id from env or GET /api/voice/convai-config
+ * (reads ELEVENLABS_AGENT_ID on the FastAPI process; no Next env required).
  */
 export function ConvAIWidget() {
-  const agentId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID ?? "";
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [errMsg, setErrMsg] = useState<string | null>(null);
 
-  if (!agentId) {
+  useEffect(() => {
+    let cancelled = false;
+
+    const envId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID?.trim();
+    if (envId) {
+      setAgentId(envId);
+      setPhase("ready");
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const j = await fetchConvaiConfig();
+        if (cancelled) return;
+        const aid = j.agent_id?.trim() || "";
+        if (aid) {
+          setAgentId(aid);
+          setPhase("ready");
+        } else {
+          setPhase("empty");
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setErrMsg(formatApiNetworkError(e));
+        setPhase("error");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (phase === "loading") {
     return (
-      <p style={{ fontSize: 13, opacity: 0.75 }}>
-        Set <code>NEXT_PUBLIC_ELEVENLABS_AGENT_ID</code> for the Conv AI widget.
+      <p style={{ fontSize: 13, opacity: 0.75, marginTop: 8 }}>
+        Loading ElevenLabs agent…
       </p>
+    );
+  }
+
+  if (phase === "error" && errMsg) {
+    return (
+      <div
+        style={{
+          fontSize: 13,
+          lineHeight: 1.5,
+          padding: 12,
+          borderRadius: 8,
+          border: "1px solid #8b4513",
+          background: "#1a1810",
+          color: "#e8c4a8",
+        }}
+      >
+        <strong style={{ color: "#f66" }}>Could not load Conv AI config.</strong>
+        <p style={{ margin: "8px 0 0", whiteSpace: "pre-wrap" }}>{errMsg}</p>
+      </div>
+    );
+  }
+
+  if (phase === "empty" || !agentId) {
+    return (
+      <div
+        style={{
+          fontSize: 13,
+          lineHeight: 1.5,
+          padding: 12,
+          borderRadius: 8,
+          border: "1px dashed #5a5340",
+          background: "#1a1810",
+          color: "#c9c4bc",
+        }}
+      >
+        <strong style={{ color: "#c9a227" }}>No ElevenLabs agent id.</strong>
+        <p style={{ margin: "8px 0 0", opacity: 0.9 }}>
+          Set <code style={{ color: "#e8e6e3" }}>ELEVENLABS_AGENT_ID</code> in the API&apos;s{" "}
+          <code style={{ color: "#e8e6e3" }}>.env</code> (same process as{" "}
+          <code style={{ color: "#e8e6e3" }}>uvicorn</code>), restart the API, refresh this page.
+        </p>
+      </div>
     );
   }
 

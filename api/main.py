@@ -16,12 +16,25 @@ PRD §13 Dev A. Routes owned by this file:
 """
 from __future__ import annotations
 
+# ─── Load env first (repo root + frontend/.env.local) before any project imports ─
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+for _env_path in (
+    _REPO_ROOT / "frontend" / ".env.local",
+    _REPO_ROOT / ".env",
+    _REPO_ROOT / ".env.local",
+):
+    if _env_path.is_file():
+        load_dotenv(_env_path, override=True)
+
 import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -36,8 +49,6 @@ from gaslit.schemas import (
     MEMORIES, QUARANTINE, RETRIEVAL_LOG, DB_NAME,
     bootstrap_collections, seed_agent_registry,
 )
-
-load_dotenv()
 
 app = FastAPI(title="GASLIT", version="0.1.0", description="Belief-layer defence on MongoDB Atlas")
 

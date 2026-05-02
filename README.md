@@ -42,9 +42,9 @@ Atlas Vector Search · Atlas Search (BM25) · `$rankFusion` · `$graphLookup` ·
 
 ```
 gaslit/      schemas, indexes, retrieval pipeline, agents, provenance, adversary
-api/         FastAPI orchestrator (:8000)
-ws/          WebSocket bridge — Change Streams to browser (:8001)
-frontend/    Next.js 16 operator console
+api/         FastAPI orchestrator (:8002 — see `API_PORT` / `docs/contracts.md`)
+ws/          WebSocket bridge — Change Streams to browser (:8003 — `WS_PORT`)
+frontend/    Next.js 16 operator console (`npm run dev` → http://localhost:3000)
 fixtures/    corpus.json (1k memories + Voyage embeddings), thresholds, MINJA payload
 scripts/     setup_indexes, load_baseline_corpus, calibrate_threshold, seed_demo, replay_server
 docs/        contracts.md (locked), architecture, MongoDB cluster screenshot
@@ -53,16 +53,21 @@ tests/       smoke tests
 
 ## Running locally
 
+**Secrets (`LiveKit`, `ElevenLabs`, `MongoDB`, etc.):** Put them in a file named **`.env` at the repository root** (next to this README). One-time setup: `cp .env.example .env`, then edit `.env` with your real keys. That file is **gitignored**, so Cursor / VS Code often **hide it from the sidebar** even though it exists — open it with **Quick Open** (`Cmd+P` / `Ctrl+P`) and type `.env`, or *File → Open*.
+
+The UI (**http://localhost:3000**) only loads after you start the Next dev server (`npm run dev` in `frontend/`). By default the browser calls **`/backend/*`** on the same origin; Next proxies to FastAPI on **:8002** (leave **`NEXT_PUBLIC_API_BASE` empty** in `frontend/.env.local` — if you synced an old value, delete it). The Conv AI widget loads **`ELEVENLABS_AGENT_ID`** from the running API via `/api/voice/convai-config`.
+
 ```bash
 python -m venv .venv
-. .venv/Scripts/activate     # Windows / PowerShell: .venv\Scripts\Activate.ps1
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env         # fill in keys
 python scripts/setup_indexes.py
 python scripts/load_baseline_corpus.py
 uvicorn api.main:app --port 8002 &
-python ws/bridge.py &     # listens on :8003
+python ws/bridge.py &        # uses WS_PORT from .env (default 8003)
 cd frontend && npm install && npm run dev
+# Open http://localhost:3000
 ```
 
 ## Submission
