@@ -91,8 +91,8 @@ def main() -> None:
         ),
         agent=AgentConfig(
             first_message=(
-                "I'm the GASLIT Forensic Auditor. Ask me about a quarantined memory, "
-                "drift score, or provenance chain."
+                "I'm the GASLIT Forensic Auditor — I explain quarantined memories, drift "
+                "against threshold, provenance, and sibling attacks. What would you like to know?"
             ),
             language="en",
             prompt=PromptAgentApiModelOutput(
