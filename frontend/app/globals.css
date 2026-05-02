@@ -130,3 +130,42 @@
   50%       { opacity: 0.6; transform: scale(1.08); }
 }
 .glow-pulse { animation: glow-pulse 6s ease-in-out infinite; }
+
+/* Spine flow — vertical traveling pulse for agent pipeline spine */
+@keyframes spine-flow {
+  0%   { top: -8%; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 108%; opacity: 0; }
+}
+.spine-flow { animation: spine-flow 5s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+
+/* Vertical scan line for highlighted panels */
+@keyframes scan-y {
+  0%   { transform: translateY(-10%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(110%); opacity: 0; }
+}
+.scan-y { animation: scan-y 4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+
+/* Subtle grid backdrop */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.grid-bg-dark {
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Marquee vertical (used by Marquee component when vertical=true) */
+@keyframes marquee-vertical {
+  from { transform: translateY(0); }
+  to   { transform: translateY(calc(-100% - var(--gap))); }
+}
+.animate-marquee-vertical { animation: marquee-vertical var(--duration) infinite linear; }
