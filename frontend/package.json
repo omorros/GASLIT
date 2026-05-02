@@ -1,16 +1,19 @@
 {
-  "name": "frontend",
+  "name": "gaslit-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.15",
+    "@livekit/components-styles": "^1.1.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "livekit-client": "^2.15.8",
     "lucide-react": "^1.14.0",
     "motion": "^12.38.0",
     "next": "16.2.4",
