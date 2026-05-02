@@ -1,0 +1,16 @@
+{
+  "drift_threshold": 0.62,
+  "drift_amber": 0.40,
+  "false_positive_rate_at_062": 0.01,
+  "calibrated_on": "baseline_corpus_v1",
+  "method": "100_retrievals_per_memory_p99_cohort_cosine_variance",
+  "raw_variance": {
+    "p50": 0.0185,
+    "p95": 0.0411,
+    "p99": 0.0512,
+    "mean": 0.0203
+  },
+  "drift_score_formula": "0.6 * normalized_cohort_variance + 0.4 * frequency_age_anomaly",
+  "calibrated_at": "2026-05-02T11:30:00Z",
+  "note": "Seed values pre-event. Run scripts/calibrate_threshold.py after corpus load to overwrite with empirical values."
+}
