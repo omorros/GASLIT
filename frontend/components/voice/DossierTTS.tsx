@@ -10,10 +10,13 @@ export function DossierTTS({
   text,
   delayMs = 1000,
   play = true,
+  statusLabel = "Dossier audio",
 }: {
   text: string | null;
   delayMs?: number;
   play?: boolean;
+  /** Shown in the status line (e.g. "Answer audio" for forensic Q&A). */
+  statusLabel?: string;
 }) {
   const [status, setStatus] = useState<"idle" | "loading" | "playing" | "error">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -56,7 +59,7 @@ export function DossierTTS({
 
   return (
     <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>
-      Dossier audio: {status === "loading" ? "loading…" : status === "playing" ? "playing" : status === "error" ? "error" : "queued"}
+      {statusLabel}: {status === "loading" ? "loading…" : status === "playing" ? "playing" : status === "error" ? "error" : "queued"}
     </div>
   );
 }

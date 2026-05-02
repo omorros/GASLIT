@@ -5,6 +5,7 @@ import { ConvAIWidget } from "@/components/voice/ConvAIWidget";
 import { DossierTTS } from "@/components/voice/DossierTTS";
 import { ForensicQAMic } from "@/components/voice/ForensicQAMic";
 import { LiveKitVoiceInput } from "@/components/voice/LiveKitVoiceInput";
+import { QuarantineDossierVoice } from "@/components/voice/QuarantineDossierVoice";
 import { VoiceFallback, useVoiceFallbackHotkey } from "@/components/voice/VoiceFallback";
 
 const SAMPLE_DOSSIER =
@@ -64,6 +65,13 @@ export default function VoiceSmokePage() {
             <DossierTTS text={SAMPLE_DOSSIER} delayMs={1000} />
           </section>
         )}
+        <section>
+          <h3 style={{ fontSize: 15, marginBottom: 8 }}>Quarantine → dossier (WebSocket)</h3>
+          <p style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+            Subscribes to <code>NEXT_PUBLIC_WS_URL</code> (<code>type: quarantine</code>, <code>dossier_text</code>) and plays TTS — same path as the operator console.
+          </p>
+          <QuarantineDossierVoice />
+        </section>
         <ForensicQAMic quarantineId={DEMO_QUARANTINE_ID || undefined} />
         <section>
           <h3 style={{ fontSize: 15, marginBottom: 8 }}>ElevenLabs Conversational AI</h3>

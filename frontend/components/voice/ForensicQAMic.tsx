@@ -10,6 +10,7 @@ import "@livekit/components-styles";
 import { RoomEvent, Track, TranscriptionSegment } from "livekit-client";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DossierTTS } from "@/components/voice/DossierTTS";
 import { fetchLiveKitToken, postForensicQA } from "@/lib/api";
 
 function Listen({
@@ -38,9 +39,12 @@ function Listen({
 export function ForensicQAMic({
   roomName = "forensic_room",
   quarantineId,
+  /** ElevenLabs Flash TTS after each `/api/forensic-qa` answer (PRD dossier-style readout). */
+  speakAnswers = true,
 }: {
   roomName?: string;
   quarantineId?: string;
+  speakAnswers?: boolean;
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
@@ -107,18 +111,27 @@ export function ForensicQAMic({
         <RoomAudioRenderer />
       </LiveKitRoom>
       {lastAnswer && (
-        <pre
-          style={{
-            marginTop: 12,
-            padding: 8,
-            background: "#0d0d0f",
-            border: "1px solid #2a2a2e",
-            fontSize: 13,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {lastAnswer}
-        </pre>
+        <>
+          <pre
+            style={{
+              marginTop: 12,
+              padding: 8,
+              background: "#0d0d0f",
+              border: "1px solid #2a2a2e",
+              fontSize: 13,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {lastAnswer}
+          </pre>
+          {speakAnswers && (
+            <DossierTTS
+              text={lastAnswer}
+              delayMs={400}
+              statusLabel="Answer audio"
+            />
+          )}
+        </>
       )}
     </section>
   );

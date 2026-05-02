@@ -46,10 +46,16 @@ async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   }
 }
 
-export async function fetchConvaiConfig(): Promise<{ agent_id: string | null }> {
+export type ConvaiPublicConfig = {
+  agent_id: string | null;
+  prompt_version?: string;
+  system_prompt_hint?: string;
+};
+
+export async function fetchConvaiConfig(): Promise<ConvaiPublicConfig> {
   const r = await apiFetch(apiUrl("/api/voice/convai-config"));
   if (!r.ok) throw new Error(await r.text());
-  return r.json() as Promise<{ agent_id: string | null }>;
+  return r.json() as Promise<ConvaiPublicConfig>;
 }
 
 export async function postVoiceInput(transcript: string, source: string, room: string) {

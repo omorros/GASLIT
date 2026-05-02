@@ -24,6 +24,8 @@ const agentId =
   process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID?.trim() ||
   process.env.ELEVENLABS_AGENT_ID?.trim() ||
   "";
+const wsPort = process.env.WS_PORT?.trim() || "8003";
+const defaultWsUrl = `ws://127.0.0.1:${wsPort}`;
 
 /** Where Next.js proxies `/backend/*` (browser default when NEXT_PUBLIC_API_BASE is unset). */
 function backendProxyTarget(): string {
@@ -47,6 +49,7 @@ const nextConfig: NextConfig = {
       process.env.NEXT_PUBLIC_VOICE_TRANSCRIPTION_MODE?.trim() || "livekit",
     NEXT_PUBLIC_DEMO_QUARANTINE_ID:
       process.env.NEXT_PUBLIC_DEMO_QUARANTINE_ID?.trim() || "",
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL?.trim() || defaultWsUrl,
   },
   async rewrites() {
     return [

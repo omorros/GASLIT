@@ -12,24 +12,18 @@ export function ConvAIWidget() {
   const [agentId, setAgentId] = useState<string | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [promptVersion, setPromptVersion] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-
     const envId = process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID?.trim();
-    if (envId) {
-      setAgentId(envId);
-      setPhase("ready");
-      return () => {
-        cancelled = true;
-      };
-    }
 
     (async () => {
       try {
         const j = await fetchConvaiConfig();
         if (cancelled) return;
-        const aid = j.agent_id?.trim() || "";
+        setPromptVersion(j.prompt_version?.trim() || null);
+        const aid = envId || j.agent_id?.trim() || "";
         if (aid) {
           setAgentId(aid);
           setPhase("ready");
@@ -38,6 +32,12 @@ export function ConvAIWidget() {
         }
       } catch (e) {
         if (cancelled) return;
+        if (envId) {
+          setAgentId(envId);
+          setPhase("ready");
+          setErrMsg(null);
+          return;
+        }
         setErrMsg(formatApiNetworkError(e));
         setPhase("error");
       }
@@ -100,6 +100,13 @@ export function ConvAIWidget() {
 
   return (
     <div style={{ marginTop: 12 }}>
+      {promptVersion && (
+        <p style={{ fontSize: 11, opacity: 0.55, marginBottom: 8 }}>
+          Server prompt bundle: <code style={{ color: "#c9a227" }}>{promptVersion}</code> — ElevenLabs agent must be
+          updated separately if you changed <code style={{ color: "#c9a227" }}>FORENSIC_AUDITOR_SYSTEM_PROMPT</code> (
+          run <code style={{ color: "#c9a227" }}>python scripts/create_convai_agent.py</code> or the dashboard).
+        </p>
+      )}
       <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />
       {createElement("elevenlabs-convai", {
         "agent-id": agentId,

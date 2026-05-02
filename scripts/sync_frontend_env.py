@@ -56,6 +56,13 @@ def main() -> None:
     if demo_q:
         updates["NEXT_PUBLIC_DEMO_QUARANTINE_ID"] = demo_q
 
+    ws_explicit = (root_vals.get("NEXT_PUBLIC_WS_URL") or "").strip()
+    if ws_explicit:
+        updates["NEXT_PUBLIC_WS_URL"] = ws_explicit
+    else:
+        ws_port = (root_vals.get("WS_PORT") or "8003").strip() or "8003"
+        updates["NEXT_PUBLIC_WS_URL"] = f"ws://127.0.0.1:{ws_port}"
+
     _merge_env(ROOT / "frontend" / ".env.local", updates)
     print("Synced frontend/.env.local from root .env (public keys only).")
 
