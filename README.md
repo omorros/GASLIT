@@ -91,7 +91,9 @@ The attacker is a normal user with no privileges. They plant a poisoned belief t
 </td>
 <td width="50%">
 
-**Operator console + voice.** *(coming: terminal screenshot of the live attack flow, Sentinel kill-restart, ElevenLabs dossier readout, SOC2 export download.)*
+**Operator console.** Live test bench, dual-pane FIRED vs BLOCKED, drift bar with quarantine eligibility, memory trust score, four-agent live status, retrieval event tape. WebSocket online, Sentinel at superstep 5556.
+
+![operator console](docs/screenshots/console.jpg)
 
 </td>
 </tr>
