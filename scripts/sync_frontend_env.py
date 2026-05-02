@@ -35,20 +35,33 @@ def _merge_env(fe_path: Path, updates: dict[str, str]) -> None:
 def main() -> None:
     root_vals = dotenv_values(ROOT / ".env")
     url = (root_vals.get("NEXT_PUBLIC_LIVEKIT_URL") or root_vals.get("LIVEKIT_URL") or "").strip()
-    api_base = (root_vals.get("NEXT_PUBLIC_API_BASE") or "http://127.0.0.1:8000").strip()
+    # Only set if explicit — empty lets the Next.js /backend proxy handle API (recommended for local dev).
+    api_base_raw = (root_vals.get("NEXT_PUBLIC_API_BASE") or "").strip()
     mode = (root_vals.get("NEXT_PUBLIC_VOICE_TRANSCRIPTION_MODE") or "livekit").strip()
 
     updates: dict[str, str] = {}
     if url:
         updates["NEXT_PUBLIC_LIVEKIT_URL"] = url
-    updates["NEXT_PUBLIC_API_BASE"] = api_base
+    if api_base_raw:
+        updates["NEXT_PUBLIC_API_BASE"] = api_base_raw
     updates["NEXT_PUBLIC_VOICE_TRANSCRIPTION_MODE"] = mode
 
-    # Preserve ElevenLabs ids from root if present
-    for k in ("NEXT_PUBLIC_ELEVENLABS_AGENT_ID", "ELEVENLABS_AGENT_ID"):
-        v = (root_vals.get(k) or "").strip()
-        if v:
-            updates[k] = v
+    # Conv AI widget: prefer NEXT_PUBLIC_*; fall back to mirroring ELEVENLABS_AGENT_ID
+    pub_agent = (root_vals.get("NEXT_PUBLIC_ELEVENLABS_AGENT_ID") or "").strip()
+    secret_agent = (root_vals.get("ELEVENLABS_AGENT_ID") or "").strip()
+    agent_for_next = pub_agent or secret_agent
+    if agent_for_next:
+        updates["NEXT_PUBLIC_ELEVENLABS_AGENT_ID"] = agent_for_next
+    demo_q = (root_vals.get("NEXT_PUBLIC_DEMO_QUARANTINE_ID") or "").strip()
+    if demo_q:
+        updates["NEXT_PUBLIC_DEMO_QUARANTINE_ID"] = demo_q
+
+    ws_explicit = (root_vals.get("NEXT_PUBLIC_WS_URL") or "").strip()
+    if ws_explicit:
+        updates["NEXT_PUBLIC_WS_URL"] = ws_explicit
+    else:
+        ws_port = (root_vals.get("WS_PORT") or "8003").strip() or "8003"
+        updates["NEXT_PUBLIC_WS_URL"] = f"ws://127.0.0.1:{ws_port}"
 
     _merge_env(ROOT / "frontend" / ".env.local", updates)
     print("Synced frontend/.env.local from root .env (public keys only).")

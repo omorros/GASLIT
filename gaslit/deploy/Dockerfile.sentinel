@@ -1,0 +1,45 @@
+# GASLIT Sentinel — ECS Fargate container image (Teammate 1).
+#
+# Keeps the image small by copying only what the Sentinel process actually
+# needs: gaslit/ (minus frontend-only sub-packages), plus requirements.txt.
+# The api/, ws/, frontend/, scripts/ trees are NOT included.
+#
+# Build:
+#   docker build -f gaslit/deploy/Dockerfile.sentinel -t gaslit-sentinel:latest .
+#
+# Run locally (needs .env with MongoDB + NVIDIA + ANTHROPIC keys):
+#   docker run --rm --env-file .env gaslit-sentinel:latest
+
+FROM python:3.12-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Build deps stripped after install — keeps the image around 300 MB.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
+
+# Copy only the runtime code for the Sentinel.
+COPY gaslit/ ./gaslit/
+
+# Sensible defaults; override at runtime.
+ENV SENTINEL_MODE=local \
+    SENTINEL_LOG_LEVEL=INFO \
+    PYTHONPATH=/app
+
+# Run the Sentinel process. SIGTERM triggers clean checkpoint flush via
+# signal handler in gaslit/agents/sentinel.py::main.
+STOPSIGNAL SIGTERM
+
+CMD ["python", "-m", "gaslit.agents.sentinel"]

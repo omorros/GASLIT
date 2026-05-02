@@ -39,7 +39,7 @@
 **Tasks in priority order:**
 
 1. **Now:** NVIDIA dev account at `build.nvidia.com`, get API key, test Nemotron from Python. Kick off NemoClaw install in parallel (2.4 GB image — start the download immediately). AWS account ready, Lambda/ECS smoke-test `"hello Sentinel"` in `eu-west-2`.
-2. **NemoClaw** (`nemoclaw my-assistant connect`) — **hard 45-min cap**. If not running by then, abort, screenshot the terminal, fall back to MINJA simulator path. Configure the NemoClaw agent to POST the bridging-steps sequence to `http://localhost:8000/api/unprotected-agent`.
+2. **NemoClaw** (`nemoclaw my-assistant connect`) — **hard 45-min cap**. If not running by then, abort, screenshot the terminal, fall back to MINJA simulator path. Configure the NemoClaw agent to POST the bridging-steps sequence to `http://localhost:8002/api/unprotected-agent` (or `API_PORT` from `.env`).
 3. **NeMo Guardrails wrapping** — `RunnableRails(config, passthrough=True)` with the self-check-input flow from PRD §15. **Write `tests/smoke/test_nemoguardrails_passes_poison.py` first** and verify the MINJA poison message passes through before anything else (if Guardrails blocks it, the demo is dead).
 4. **Nemotron 3 Super client** — OpenAI-compatible (`https://integrate.api.nvidia.com/v1`, model `nvidia/nemotron-3-super-120b-a12b`). LRU cache keyed on `(memory_id, drift_bucket)` with 5-min TTL. Test with 100 simulated drift events, verify <40 RPM.
 5. **Sentinel agent** — LangGraph `StateGraph`, `MongoDBSaver` v0.3.1 checkpointer. Subscribes to `retrieval_log` Change Stream. Drift score runs in MongoDB aggregation pipeline (no model call). Nemotron called only when `drift_score > 0.62` for explanation. Quarantine writes use idempotency key `(memory_id, drift_bucket, sentinel_run_id)`.
@@ -98,7 +98,7 @@
 
 1. **Now:** Next.js 16 + Tailwind + TypeScript scaffold. Install `@livekit/components-react` so voice teammate's components mount cleanly when they land.
 2. **First 30 min — agree the WebSocket event schema with the user in writing in team chat. Lock it.** Format: `{type, payload}` with `type ∈ {drift_update, quarantine, retrieval, agent_status}`. **Do not change after agreement** — both sides build against it independently.
-3. **`useGaslitEvents()` hook** — connects to `ws://localhost:8001`, dispatches typed events. Build with mocked events first, don't wait for the bridge.
+3. **`useGaslitEvents()` hook** — connects to `ws://localhost:8003` (or `WS_PORT` from `.env`), dispatches typed events. Build with mocked events first, don't wait for the bridge.
 4. **`DualConsole.tsx`** — split layout, single text input that simultaneously POSTs to `/api/unprotected-agent` and `/api/gaslit-agent`. Stream responses as chat bubbles in each pane.
 5. **`FiredBlockedIndicator.tsx`** — RED pulsing border + "FIRED" banner / GREEN solid border + "BLOCKED". **Min 32px font, readable from 5 metres.** CSS `@keyframes`.
 6. **`MoneyLedger.tsx`** — left starts $50,000, slot-machine count-down on FIRED → $45,200. Right stays locked. Big numbers.
@@ -145,13 +145,13 @@
 11. `gaslit/agents/forensic_auditor.py` — quarantine Change Stream trigger → `provenance/chain.py` → sibling vector search → Sonnet 4.6 dossier composition. Hands dossier text to voice teammate's `tts.py`. LangGraph-checkpointed (`MongoDBSaver`). LangSmith tracing ON.
 
 ### FastAPI + WebSocket
-12. `api/main.py` — FastAPI on `:8000`. Routes you own:
+12. `api/main.py` — FastAPI on `:8002` (or `API_PORT` from `.env`). Routes you own:
     - `POST /api/unprotected-agent`, `POST /api/gaslit-agent`
     - `GET /api/memories` (last 50 + drift), `GET /api/trust-score` (0–100 aggregate)
     - `POST /api/launch-minja-attack`
     - `GET /api/compliance-export/{quarantine_id}`
     - `include_router()` from teammate 1's `sentinel_router.py` and teammate 2's voice router. Single seam, single merge file.
-13. `ws/bridge.py` — WebSocket server on `:8001`. Subscribes to Change Streams on `memories` (drift updates), `retrieval_log` (inserts), `quarantine` (inserts). Broadcasts JSON to all clients per the locked schema.
+13. `ws/bridge.py` — WebSocket server on `:8003` (or `WS_PORT` from `.env`). Subscribes to Change Streams on `memories` (drift updates), `retrieval_log` (inserts), `quarantine` (inserts). Broadcasts JSON to all clients per the locked schema.
 
 ### Fixtures + adversary (this is your blocker for the team — get it out fast)
 14. **`fixtures/corpus.json` — TOP PRIORITY.** 1,000 memories distilled via Sonnet 4.6, Voyage 3 large embeddings pre-computed for every row. Include 5 poisoned memories matching the demo attack. Commit and ping team.

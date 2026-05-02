@@ -16,18 +16,32 @@ PRD §13 Dev A. Routes owned by this file:
 """
 from __future__ import annotations
 
+# ─── Load env first (repo root + frontend/.env.local) before any project imports ─
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+for _env_path in (
+    _REPO_ROOT / "frontend" / ".env.local",
+    _REPO_ROOT / ".env",
+    _REPO_ROOT / ".env.local",
+):
+    if _env_path.is_file():
+        load_dotenv(_env_path, override=True)
+
 import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 
 from gaslit.agents.scribe import scribe_turn
+from gaslit.embeddings import EmbeddingServiceError
 from gaslit.retrieval.librarian import (
     retrieve_with_audit, retrieve_unprotected,
 )
@@ -36,8 +50,6 @@ from gaslit.schemas import (
     MEMORIES, QUARANTINE, RETRIEVAL_LOG, DB_NAME,
     bootstrap_collections, seed_agent_registry,
 )
-
-load_dotenv()
 
 app = FastAPI(title="GASLIT", version="0.1.0", description="Belief-layer defence on MongoDB Atlas")
 
@@ -151,10 +163,13 @@ def unprotected_agent(req: AgentRequest):
     # Best-effort scribe; never blocks the chat path.
     scribe_turn(req.user_id, req.thread_id, req.turn_number, req.message)
 
-    memories = retrieve_unprotected(
-        req.message,
-        {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
-    )
+    try:
+        memories = retrieve_unprotected(
+            req.message,
+            {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
+        )
+    except EmbeddingServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     fired = (tool_name == "refund_request" and _looks_like_auto_approval(memories))
     response = (
@@ -176,10 +191,13 @@ def gaslit_agent(req: AgentRequest):
 
     scribe_turn(req.user_id, req.thread_id, req.turn_number, req.message)
 
-    audit = retrieve_with_audit(
-        req.message,
-        {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
-    )
+    try:
+        audit = retrieve_with_audit(
+            req.message,
+            {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
+        )
+    except EmbeddingServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     fired = (tool_name == "refund_request"
              and _looks_like_auto_approval(audit["memories"]))
@@ -249,3 +267,4 @@ _try_include("gaslit.adversary.minja_simulator", "router")
 _try_include("api.compliance_export", "router")
 _try_include("gaslit.agents.sentinel", "sentinel_router")
 _try_include("gaslit.voice.router", "voice_router")
+_try_include("api.demo_dashboard", "router")

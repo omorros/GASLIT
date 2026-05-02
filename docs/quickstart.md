@@ -71,6 +71,7 @@ curl http://127.0.0.1:8002/api/minja-canonical
 
 ```bash
 python scripts/setup_indexes.py               # idempotent — bootstrap collections + indexes
+python -m pytest tests/smoke/test_atlas_live_readiness.py -q  # live Atlas readiness proof
 python scripts/load_baseline_corpus.py        # reload fixtures/corpus.json into memories
 python scripts/seed_demo.py                   # pre-warm m_4419 to drift=0.58 before each dry run
 python scripts/calibrate_threshold.py         # recompute p99 baseline; writes fixtures/thresholds.json
@@ -81,6 +82,7 @@ python scripts/calibrate_threshold.py         # recompute p99 baseline; writes f
 | What | URL | Trigger |
 |---|---|---|
 | Full MINJA 3-turn attack | `POST /api/launch-minja-attack` | `MinjaAttackButton.tsx` |
+| NemoClaw-driven MINJA turns | `python scripts/nemoclaw_minja_driver.py --api http://host.docker.internal:8002` | run inside/alongside NemoClaw OpenShell |
 | Live Fireworks adversary stream | `python -m gaslit.adversary.live_traffic --duration 60 --qps 1` | manual / pre-demo cue |
 | Compliance JSON download | `GET /api/compliance-export/{quarantine_id}` | `ComplianceExportButton.tsx` |
 | Replay the canonical recording | `python scripts/replay_server.py --port 8003` | Ctrl+Shift+R in frontend |
