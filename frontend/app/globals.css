@@ -1,0 +1,23 @@
+:root {
+  --gaslit-bg: #0a0a0b;
+  --gaslit-border: #2a2a2e;
+  --gaslit-accent: #c9a227;
+  --gaslit-text: #e8e6e3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: var(--gaslit-bg);
+  color: var(--gaslit-text);
+  min-height: 100vh;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+}
