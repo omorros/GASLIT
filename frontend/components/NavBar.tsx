@@ -16,6 +16,7 @@ export default function NavBar() {
 
       <div className="hidden md:flex gap-8 text-[11px] uppercase tracking-widest font-bold text-neutral-500">
         <Link href="/" className="hover:text-[#76b900] transition-colors">Home</Link>
+        <Link href="/about" className="hover:text-[#76b900] transition-colors">About</Link>
         <Link href="/console" className="hover:text-[#76b900] transition-colors">Console</Link>
         <Link href="https://arxiv.org/abs/2503.03704" target="_blank" rel="noopener noreferrer" className="hover:text-[#76b900] transition-colors">MINJA Paper</Link>
       </div>
