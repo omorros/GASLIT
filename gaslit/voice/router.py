@@ -86,7 +86,7 @@ async def voice_input(body: VoiceInputPayload) -> JSONResponse:
 
 @voice_router.post("/forensic-qa")
 async def forensic_qa(body: ForensicQARequest) -> JSONResponse:
-    """Transcribed question → Forensic Auditor (stub) → text for UI / Conv AI."""
+    """Transcribed question → `forensic_auditor.answer_qa` (Claude + MongoDB context)."""
     answer = await on_forensic_question(body.question, body.quarantine_id)
     return JSONResponse({"answer": answer, "quarantine_id": body.quarantine_id})
 

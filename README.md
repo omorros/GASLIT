@@ -57,6 +57,8 @@ tests/       smoke tests
 
 The UI (**http://localhost:3000**) only loads after you start the Next dev server (`npm run dev` in `frontend/`). By default the browser calls **`/backend/*`** on the same origin; Next proxies to FastAPI on **:8002** (leave **`NEXT_PUBLIC_API_BASE` empty** in `frontend/.env.local` — if you synced an old value, delete it). The Conv AI widget loads **`ELEVENLABS_AGENT_ID`** from the running API via `/api/voice/convai-config`.
 
+**Forensic Auditor voice — two paths:** (1) **Grounded Q&A** — `POST /api/forensic-qa` calls `gaslit.agents.forensic_auditor.answer_qa` (Claude with quarantine + memory context from MongoDB). The Forensic Q&A mic (`/voice`, operator console) uses this when a `quarantine_id` is provided (e.g. `NEXT_PUBLIC_DEMO_QUARANTINE_ID`). (2) **ElevenLabs Conv AI widget** — a hosted conversational agent using the same *persona* (`FORENSIC_AUDITOR_SYSTEM_PROMPT` in `gaslit/voice/conv_ai.py`); it does not call our API unless you add server tools / webhooks in ElevenLabs.
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate    # Windows: .venv\Scripts\activate
