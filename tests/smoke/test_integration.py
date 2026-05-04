@@ -27,6 +27,7 @@ import httpx
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
+from gaslit.adversary.local_api import local_api_base
 from gaslit.schemas import MEMORIES, RETRIEVAL_LOG, DB_NAME
 
 load_dotenv()
@@ -42,7 +43,7 @@ HIGH_VALUE_REFUND = {
 
 
 def main() -> int:
-    api = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api = local_api_base()
     db = MongoClient(os.environ["MONGODB_URI"])[DB_NAME]
 
     # Pre-flight: poisoned memory must be in DB.

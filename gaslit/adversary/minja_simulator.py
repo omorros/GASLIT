@@ -25,6 +25,8 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from gaslit.adversary.local_api import local_api_base
+
 CANONICAL_PATH = Path(__file__).parent / "minja_canonical.json"
 ATTACK_STATE: dict[str, dict] = {}
 
@@ -80,7 +82,7 @@ def attack_status(attack_id: str) -> dict:
 
 
 def _run_attack(attack_id: str, canonical: dict, delay_ms: int) -> None:
-    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api_base = local_api_base()
     turns = canonical["turns"]
     thread_id = f"t_minja_{attack_id}"
     try:
