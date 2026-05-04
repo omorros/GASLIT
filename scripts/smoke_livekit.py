@@ -12,12 +12,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from gaslit.adversary.local_api import local_api_base
+
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
 
 def main() -> None:
-    base = os.environ.get("NEXT_PUBLIC_API_BASE", "http://127.0.0.1:8000").rstrip("/")
+    base = (os.environ.get("NEXT_PUBLIC_API_BASE") or local_api_base()).rstrip("/")
     url = f"{base}/api/livekit/token"
     body = json.dumps({"room": "attacker_room", "identity": "smoke-test"}).encode()
     req = urllib.request.Request(

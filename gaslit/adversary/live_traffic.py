@@ -18,6 +18,8 @@ from pathlib import Path
 import httpx
 from openai import OpenAI
 
+from gaslit.adversary.local_api import local_api_base
+
 ADVERSARY_QUERIES_PATH = (
     Path(__file__).resolve().parent.parent.parent / "fixtures" / "adversary_queries.json"
 )
@@ -67,7 +69,7 @@ def load_canned() -> list[str]:
 def stream_traffic(duration_s: int = 60, qps: float = 1.0,
                    *, source: str = "canned") -> int:
     """Send queries at ~qps for duration_s seconds. Returns the number sent."""
-    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api_base = local_api_base()
     queries: list[str]
     if source == "live":
         try:
