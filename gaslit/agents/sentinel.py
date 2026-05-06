@@ -339,11 +339,14 @@ def start_local() -> dict:
     global _worker_thread, _run_id
     with _worker_lock:
         if _worker_thread is not None and _worker_thread.is_alive():
+            status = "stopping" if _stop_event.is_set() else "already_running"
             return {
-                "status": "already_running",
+                "status": status,
                 "run_id": _run_id,
                 "superstep": _last_superstep(_db()),
+                "mode": "local",
             }
+        _worker_thread = None
         _stop_event.clear()
         _run_id = uuid.uuid4().hex[:8]
         _worker_thread = threading.Thread(
@@ -370,6 +373,17 @@ def stop_local(timeout_s: float = 3.0) -> dict:
         _stop_event.set()
         _worker_thread.join(timeout=timeout_s)
         superstep = _last_superstep(_db())
+        if _worker_thread.is_alive():
+            note = "Sentinel stopping (local)"
+            _register_agent_status(_db(), "stopping", run_id=_run_id or "",
+                                   note=note, superstep=superstep)
+            return {
+                "status": "stopping",
+                "run_id": _run_id,
+                "superstep": superstep,
+                "mode": "local",
+                "note": note,
+            }
         note = "Sentinel offline (local)"
         _register_agent_status(_db(), "offline", run_id=_run_id or "",
                                note=note, superstep=superstep)
@@ -469,7 +483,9 @@ def api_sentinel_status() -> SentinelLifecycleResponse:
     status = doc.get("status", "unknown")
     if SENTINEL_MODE == "local":
         alive = _worker_thread is not None and _worker_thread.is_alive()
-        if alive and status != "online":
+        if alive and _stop_event.is_set():
+            status = "stopping"
+        elif alive and status != "online":
             status = "online"
         elif not alive and status == "online":
             status = "offline"
