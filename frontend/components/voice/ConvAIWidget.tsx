@@ -107,7 +107,12 @@ export function ConvAIWidget() {
           run <code style={{ color: "#c9a227" }}>python scripts/create_convai_agent.py</code> or the dashboard).
         </p>
       )}
-      <Script src="https://unpkg.com/@elevenlabs/convai-widget-embed" strategy="afterInteractive" />
+      <Script
+        src="https://unpkg.com/@elevenlabs/convai-widget-embed@0.12.2/dist/index.js"
+        integrity="sha384-g+ZOs9R8zEeyPQLUJ6Kpz3vST46tvlrrbveDJmDtJwT66qVMsNpDg/syUc1HRoiz"
+        crossOrigin="anonymous"
+        strategy="afterInteractive"
+      />
       {createElement("elevenlabs-convai", {
         "agent-id": agentId,
         style: { display: "block", minHeight: 120, width: "100%" },
