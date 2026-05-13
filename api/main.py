@@ -166,7 +166,7 @@ def unprotected_agent(req: AgentRequest):
     try:
         memories = retrieve_unprotected(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "unprotected"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -194,7 +194,7 @@ def gaslit_agent(req: AgentRequest):
     try:
         audit = retrieve_with_audit(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "librarian"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
