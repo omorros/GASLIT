@@ -167,7 +167,8 @@ def write_memory(user_id: str, thread_id: str, turn_number: int,
 
 
 def scribe_turn(user_id: str, thread_id: str, turn_number: int,
-                user_message: str) -> Optional[dict]:
+                user_message: str, *,
+                memory_id: Optional[str] = None) -> Optional[dict]:
     """Distil -> write_memory. Returns the memory or None if nothing distilled.
 
     Errors in distillation log a warning but don't raise — the chat path must
@@ -188,6 +189,7 @@ def scribe_turn(user_id: str, thread_id: str, turn_number: int,
             source_text=distilled["memory_text"],
             source_type=distilled["source_type"],
             confidence=distilled["confidence"],
+            memory_id=memory_id,
         )
     except Exception as e:
         print(f"[scribe] write_memory error: {e}")
