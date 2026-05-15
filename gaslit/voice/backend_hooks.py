@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
 
-def _voice_ids(room: str | None) -> tuple[str, str, int]:
+
+def _voice_ids(room: str | None, transcript: str) -> tuple[str, str, int]:
     r = (room or "voice").replace(" ", "_")
-    return f"voice:{r}", f"thread:{r}", 1
+    normalized = " ".join(transcript.strip().split()).lower()
+    digest = hashlib.sha256(f"{r}|{normalized}".encode()).hexdigest()
+    turn_number = 1 + (int(digest[:12], 16) % 2_000_000_000)
+    return f"voice:{r}", f"thread:{r}", turn_number
 
 
 async def on_voice_transcript(transcript: str, room: str | None, source: str | None) -> dict:
     """Forward speech-as-text into the Scribe memory pipeline."""
     from gaslit.agents.scribe import scribe_turn
 
-    user_id, thread_id, turn_number = _voice_ids(room)
+    user_id, thread_id, turn_number = _voice_ids(room, transcript)
     mem = scribe_turn(user_id, thread_id, turn_number, transcript)
     return {
         "ok": True,
