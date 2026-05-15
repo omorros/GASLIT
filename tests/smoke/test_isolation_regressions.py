@@ -36,7 +36,8 @@ def _install_api_fakes(calls: dict[str, list[dict]]) -> None:
             return lambda fn: fn
 
     class FakeBaseModel:
-        pass
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
 
     class FakeMongoClient:
         def __init__(self, *args, **kwargs):
