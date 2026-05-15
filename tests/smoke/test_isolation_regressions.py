@@ -68,6 +68,9 @@ def _install_api_fakes(calls: dict[str, list[dict]]) -> None:
     pymongo = types.ModuleType("pymongo")
     pymongo.MongoClient = FakeMongoClient
 
+    dotenv = types.ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *args, **kwargs: None
+
     scribe = types.ModuleType("gaslit.agents.scribe")
     scribe.scribe_turn = lambda *args, **kwargs: None
 
@@ -105,6 +108,7 @@ def _install_api_fakes(calls: dict[str, list[dict]]) -> None:
             "fastapi.middleware.cors": cors,
             "pydantic": pydantic,
             "pymongo": pymongo,
+            "dotenv": dotenv,
             "gaslit.agents.scribe": scribe,
             "gaslit.embeddings": embeddings,
             "gaslit.retrieval.librarian": librarian,
