@@ -73,6 +73,9 @@ def _install_api_import_stubs() -> types.ModuleType:
     pymongo = types.ModuleType("pymongo")
     pymongo.MongoClient = object
     sys.modules["pymongo"] = pymongo
+    pymongo_database = types.ModuleType("pymongo.database")
+    pymongo_database.Database = object
+    sys.modules["pymongo.database"] = pymongo_database
 
     scribe = types.ModuleType("gaslit.agents.scribe")
     scribe.scribe_turn = lambda *args, **kwargs: None
