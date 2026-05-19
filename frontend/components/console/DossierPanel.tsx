@@ -37,6 +37,7 @@ export function DossierPanel({
   const [audio, setAudio] = useState<"idle" | "loading" | "playing" | "muted" | "error">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingRef = useRef(false);
+  const playbackRunRef = useRef(0);
   const idRef = useRef(0);
 
   function enqueue(text: string) {
@@ -44,40 +45,59 @@ export function DossierPanel({
     setQueue((q) => [...q, { id: ++idRef.current, text }]);
   }
 
+  const queueHead = queue[0];
+
   // Drain queue serially
   useEffect(() => {
     if (playingRef.current) return;
-    const head = queue[0];
-    if (!head) return;
+    if (!queueHead) return;
     let cancelled = false;
+    let objectUrl: string | null = null;
+    let currentAudio: HTMLAudioElement | null = null;
+    const runId = ++playbackRunRef.current;
+    const isCurrentRun = () => playbackRunRef.current === runId;
+
+    const releaseObjectUrl = () => {
+      if (!objectUrl) return;
+      URL.revokeObjectURL(objectUrl);
+      objectUrl = null;
+    };
+
     (async () => {
       playingRef.current = true;
-      setNow(head);
+      setNow(queueHead);
       setAudio("loading");
       try {
-        const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        const buf = await postTTS(queueHead.text, "forensic");
+        if (cancelled) {
+          if (isCurrentRun()) playingRef.current = false;
+          return;
+        }
         const blob = new Blob([buf], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
-        const a = new Audio(url);
+        objectUrl = URL.createObjectURL(blob);
+        const a = new Audio(objectUrl);
+        currentAudio = a;
         audioRef.current = a;
         a.onended = () => {
-          URL.revokeObjectURL(url);
+          releaseObjectUrl();
+          if (!isCurrentRun()) return;
           playingRef.current = false;
           setAudio("idle");
           setNow(null);
           setQueue((q) => q.slice(1));
         };
         a.onerror = () => {
-          URL.revokeObjectURL(url);
+          releaseObjectUrl();
+          if (!isCurrentRun()) return;
           playingRef.current = false;
           setAudio("error");
           setNow(null);
           setQueue((q) => q.slice(1));
         };
         await a.play();
-        if (!cancelled) setAudio("playing");
+        if (!cancelled && isCurrentRun()) setAudio("playing");
       } catch {
+        if (cancelled || !isCurrentRun()) return;
         playingRef.current = false;
         setAudio("error");
         setNow(null);
@@ -86,8 +106,11 @@ export function DossierPanel({
     })();
     return () => {
       cancelled = true;
+      currentAudio?.pause();
+      releaseObjectUrl();
+      if (isCurrentRun()) playingRef.current = false;
     };
-  }, [queue]);
+  }, [queueHead]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);

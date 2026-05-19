@@ -32,10 +32,11 @@ for _env_path in (
         load_dotenv(_env_path, override=True)
 
 import threading
+import hmac
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
@@ -254,6 +255,32 @@ def trust_score():
 import uuid as _uuid
 
 _FLOOD_RUNS: dict[str, dict[str, Any]] = {}
+_FLOOD_LOCK = threading.Lock()
+_FLOOD_MAX_ACTIVE_RUNS = 1
+_FLOOD_MAX_HISTORY = 20
+
+
+def _require_operator_token(token: Optional[str]) -> None:
+    configured = os.environ.get("GASLIT_OPERATOR_TOKEN", "").strip()
+    if not configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Flood mode is disabled until GASLIT_OPERATOR_TOKEN is configured.",
+        )
+    if not token or not hmac.compare_digest(token, configured):
+        raise HTTPException(status_code=403, detail="Invalid operator token.")
+
+
+def _prune_flood_runs_locked() -> None:
+    """Keep completed run metadata bounded without dropping active status."""
+    while len(_FLOOD_RUNS) > _FLOOD_MAX_HISTORY:
+        stale_id = next(
+            (run_id for run_id, run in _FLOOD_RUNS.items() if run.get("status") != "running"),
+            None,
+        )
+        if stale_id is None:
+            return
+        _FLOOD_RUNS.pop(stale_id, None)
 
 
 class FloodRequest(BaseModel):
@@ -270,33 +297,48 @@ class FloodResponse(BaseModel):
 
 
 @app.post("/api/scenario/flood", response_model=FloodResponse, status_code=202)
-def scenario_flood(req: FloodRequest = FloodRequest()):
+def scenario_flood(
+    req: FloodRequest = FloodRequest(),
+    x_gaslit_operator_token: Optional[str] = Header(default=None, alias="X-GASLIT-Operator-Token"),
+):
     """Burst paired requests into both agents to drive cohort variance / drift.
 
     Wraps `gaslit.adversary.live_traffic.stream_traffic` in a daemon thread.
     Used by the Operator Console "Flood" scenario to make the drift gauge climb.
     """
-    from gaslit.adversary.live_traffic import stream_traffic
+    _require_operator_token(x_gaslit_operator_token)
+
     run_id = f"flood_{_uuid.uuid4().hex[:8]}"
-    _FLOOD_RUNS[run_id] = {
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "duration_s": req.duration_s,
-        "qps": req.qps,
-        "source": req.source,
-        "status": "running",
-        "sent": 0,
-    }
+    with _FLOOD_LOCK:
+        active = sum(1 for run in _FLOOD_RUNS.values() if run.get("status") == "running")
+        if active >= _FLOOD_MAX_ACTIVE_RUNS:
+            raise HTTPException(status_code=409, detail="A flood scenario is already running.")
+        _FLOOD_RUNS[run_id] = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "duration_s": req.duration_s,
+            "qps": req.qps,
+            "source": req.source,
+            "status": "running",
+            "sent": 0,
+        }
+        _prune_flood_runs_locked()
+
+    from gaslit.adversary.live_traffic import stream_traffic
 
     def _run() -> None:
         try:
             sent = stream_traffic(req.duration_s, req.qps, source=req.source)
-            _FLOOD_RUNS[run_id]["sent"] = int(sent)
-            _FLOOD_RUNS[run_id]["status"] = "completed"
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["sent"] = int(sent)
+                _FLOOD_RUNS[run_id]["status"] = "completed"
         except Exception as exc:
-            _FLOOD_RUNS[run_id]["status"] = "error"
-            _FLOOD_RUNS[run_id]["error"] = repr(exc)
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["status"] = "error"
+                _FLOOD_RUNS[run_id]["error"] = repr(exc)
         finally:
-            _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+                _prune_flood_runs_locked()
 
     threading.Thread(target=_run, daemon=True, name=run_id).start()
     return FloodResponse(
@@ -306,7 +348,8 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
 
 @app.get("/api/scenario/flood/{run_id}")
 def scenario_flood_status(run_id: str):
-    return _FLOOD_RUNS.get(run_id, {"status": "unknown"})
+    with _FLOOD_LOCK:
+        return dict(_FLOOD_RUNS.get(run_id, {"status": "unknown"}))
 
 
 # ─── Optional routers from teammates / sibling modules ────────────────

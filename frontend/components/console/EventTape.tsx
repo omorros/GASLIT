@@ -50,6 +50,9 @@ export function EventTape({
 function Line({ e, fresh }: { e: GaslitEvent; fresh: boolean }) {
   const ts = (e.ts || "").slice(11, 19);
 
+  const formatNumber = (value: number | null | undefined, digits = 2) =>
+    typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "n/a";
+
   let body: string;
   let tag: string;
   let tagColor: string;
@@ -60,9 +63,11 @@ function Line({ e, fresh }: { e: GaslitEvent; fresh: boolean }) {
     tag = "retrieval";
     tagColor = p.filtered ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700";
     textColor = p.filtered ? "text-red-700" : "text-neutral-700";
-    body = `${p.memory_id}  ·  ${p.agent_id}  ·  ${p.contract_id}  ·  score=${p.score.toFixed(
-      2,
-    )}  ·  rank=${p.retrieved_rank}  ·  ${p.filtered ? "filtered" : "passed"}`;
+    body = `${p.memory_id ?? "unknown"}  ·  ${p.agent_id ?? "unknown"}  ·  ${
+      p.contract_id ?? "no-contract"
+    }  ·  score=${formatNumber(p.score)}  ·  rank=${p.retrieved_rank ?? "n/a"}  ·  ${
+      p.filtered ? "filtered" : "passed"
+    }`;
   } else if (e.type === "drift_update") {
     const p = e.payload;
     tag = "drift";
@@ -72,8 +77,8 @@ function Line({ e, fresh }: { e: GaslitEvent; fresh: boolean }) {
         ? "bg-amber-50 text-amber-700"
         : "bg-neutral-100 text-neutral-600";
     textColor = p.above_threshold ? "text-red-700" : "text-neutral-700";
-    body = `${p.memory_id}  ·  score=${p.drift_score.toFixed(2)}  ·  variance=${p.cohort_variance.toFixed(
-      2,
+    body = `${p.memory_id}  ·  score=${formatNumber(p.drift_score)}  ·  variance=${formatNumber(
+      p.cohort_variance,
     )}×  ·  retrievals=${p.retrieval_count}${p.above_threshold ? "  ·  ABOVE THRESHOLD" : ""}`;
   } else if (e.type === "quarantine") {
     tag = "quarantine";

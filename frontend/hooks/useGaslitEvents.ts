@@ -9,11 +9,11 @@ export type AgentStatusPayload = {
 };
 
 export type RetrievalPayload = {
-  memory_id: string;
-  agent_id: string;
-  contract_id: string;
-  retrieved_rank: number;
-  score: number;
+  memory_id?: string | null;
+  agent_id?: string | null;
+  contract_id?: string | null;
+  retrieved_rank?: number | null;
+  score?: number | null;
   filtered: boolean;
 };
 
