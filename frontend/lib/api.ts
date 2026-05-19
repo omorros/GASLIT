@@ -203,10 +203,15 @@ export async function postScenarioFlood(
   durationS = 15,
   qps = 5,
   source: "canned" | "live" = "canned",
+  operatorToken?: string,
 ): Promise<FloodLaunch> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = operatorToken?.trim();
+  if (token) headers["X-GASLIT-Operator-Token"] = token;
+
   const r = await apiFetch(apiUrl("/api/scenario/flood"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ duration_s: durationS, qps, source }),
   });
   if (!r.ok) throw new Error(await r.text());
