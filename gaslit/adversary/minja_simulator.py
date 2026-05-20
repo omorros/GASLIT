@@ -80,7 +80,7 @@ def attack_status(attack_id: str) -> dict:
 
 
 def _run_attack(attack_id: str, canonical: dict, delay_ms: int) -> None:
-    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8002')}"
     turns = canonical["turns"]
     thread_id = f"t_minja_{attack_id}"
     try:

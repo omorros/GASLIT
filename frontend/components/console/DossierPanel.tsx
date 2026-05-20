@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { QuarantinePayload } from "@/hooks/useGaslitEvents";
 import { ComplianceExportButton } from "./ComplianceExportButton";
 import { postForensicQA, postTTS } from "@/lib/api";
@@ -36,58 +36,79 @@ export function DossierPanel({
   const [now, setNow] = useState<SpokenLine | null>(null);
   const [audio, setAudio] = useState<"idle" | "loading" | "playing" | "muted" | "error">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
   const playingRef = useRef(false);
   const idRef = useRef(0);
+
+  const clearObjectUrl = useCallback(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  }, []);
 
   function enqueue(text: string) {
     if (!text.trim()) return;
     setQueue((q) => [...q, { id: ++idRef.current, text }]);
   }
 
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      audioRef.current?.pause();
+      playingRef.current = false;
+      clearObjectUrl();
+    };
+  }, [clearObjectUrl]);
+
   // Drain queue serially
   useEffect(() => {
     if (playingRef.current) return;
     const head = queue[0];
     if (!head) return;
-    let cancelled = false;
+
+    function finish(status: "idle" | "error") {
+      clearObjectUrl();
+      audioRef.current = null;
+      playingRef.current = false;
+      setAudio(status);
+      setNow(null);
+      setQueue((q) => q.filter((line) => line.id !== head.id));
+    }
+
     (async () => {
       playingRef.current = true;
       setNow(head);
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        if (!mountedRef.current) {
+          playingRef.current = false;
+          return;
+        }
         const blob = new Blob([buf], { type: "audio/mpeg" });
         const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
         const a = new Audio(url);
         audioRef.current = a;
         a.onended = () => {
-          URL.revokeObjectURL(url);
-          playingRef.current = false;
-          setAudio("idle");
-          setNow(null);
-          setQueue((q) => q.slice(1));
+          if (mountedRef.current) finish("idle");
         };
         a.onerror = () => {
-          URL.revokeObjectURL(url);
-          playingRef.current = false;
-          setAudio("error");
-          setNow(null);
-          setQueue((q) => q.slice(1));
+          if (mountedRef.current) finish("error");
         };
         await a.play();
-        if (!cancelled) setAudio("playing");
+        if (mountedRef.current) setAudio("playing");
       } catch {
         playingRef.current = false;
+        if (!mountedRef.current) return;
         setAudio("error");
         setNow(null);
-        setQueue((q) => q.slice(1));
+        setQueue((q) => q.filter((line) => line.id !== head.id));
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [queue]);
+  }, [clearObjectUrl, queue]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);

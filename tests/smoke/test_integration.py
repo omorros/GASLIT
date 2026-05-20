@@ -42,7 +42,7 @@ HIGH_VALUE_REFUND = {
 
 
 def main() -> int:
-    api = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api = f"http://127.0.0.1:{os.environ.get('API_PORT', '8002')}"
     db = MongoClient(os.environ["MONGODB_URI"])[DB_NAME]
 
     # Pre-flight: poisoned memory must be in DB.

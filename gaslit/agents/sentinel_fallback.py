@@ -40,6 +40,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 
+from gaslit.agents.eval_debounce import PendingEval, due_memory_ids, schedule_eval
 from gaslit.schemas import (
     MEMORIES, RETRIEVAL_LOG, QUARANTINE, DB_NAME, DRIFT_THRESHOLD,
     QUARANTINE_TTL_SECONDS,
@@ -124,44 +125,58 @@ def write_quarantine(db, memory_id: str, drift: float, var: float,
     return True
 
 
+def _evaluate_memory(db, memory_id: str, sentinel_run_id: str) -> None:
+    drift, var, n = compute_drift(db, memory_id)
+    db[MEMORIES].update_one(
+        {"memory_id": memory_id},
+        {"$set": {
+            "drift_score": drift,
+            "cohort_variance": var,
+            "retrieval_count": n,
+        }},
+    )
+    if drift > DRIFT_THRESHOLD:
+        if write_quarantine(db, memory_id, drift, var, sentinel_run_id):
+            print(
+                f"[sentinel-fallback] QUARANTINED {memory_id} "
+                f"drift={drift:.2f} variance_ratio={var:.2f} n={n}",
+                flush=True,
+            )
+
+
+def _flush_due_evaluations(
+    pending_eval: PendingEval,
+    db,
+    sentinel_run_id: str,
+) -> None:
+    for mid in due_memory_ids(pending_eval, time.time()):
+        _evaluate_memory(db, mid, sentinel_run_id)
+
+
 def watch() -> None:
     sentinel_run_id = uuid.uuid4().hex[:8]
     print(f"[sentinel-fallback] run_id={sentinel_run_id} watching {RETRIEVAL_LOG}...",
           flush=True)
     db = _client()[DB_NAME]
     pipeline = [{"$match": {"operationType": "insert"}}]
-    last_eval: dict[str, float] = {}
-    EVAL_DEBOUNCE_S = 0.5
+    pending_eval: PendingEval = {}
 
     while True:
         try:
-            with db[RETRIEVAL_LOG].watch(pipeline) as stream:
-                for change in stream:
+            with db[RETRIEVAL_LOG].watch(pipeline, max_await_time_ms=200) as stream:
+                while True:
+                    change = stream.try_next()
+                    if change is None:
+                        _flush_due_evaluations(pending_eval, db, sentinel_run_id)
+                        time.sleep(0.05)
+                        continue
+
                     doc = change.get("fullDocument") or {}
                     mid = doc.get("memory_id")
                     if not mid:
                         continue
-                    now = time.time()
-                    if mid in last_eval and now - last_eval[mid] < EVAL_DEBOUNCE_S:
-                        continue
-                    last_eval[mid] = now
-
-                    drift, var, n = compute_drift(db, mid)
-                    db[MEMORIES].update_one(
-                        {"memory_id": mid},
-                        {"$set": {
-                            "drift_score": drift,
-                            "cohort_variance": var,
-                            "retrieval_count": n,
-                        }},
-                    )
-                    if drift > DRIFT_THRESHOLD:
-                        if write_quarantine(db, mid, drift, var, sentinel_run_id):
-                            print(
-                                f"[sentinel-fallback] QUARANTINED {mid} "
-                                f"drift={drift:.2f} variance_ratio={var:.2f} n={n}",
-                                flush=True,
-                            )
+                    schedule_eval(pending_eval, mid, time.time())
+                    _flush_due_evaluations(pending_eval, db, sentinel_run_id)
         except Exception as e:
             print(f"[sentinel-fallback] stream error: {type(e).__name__}: {e}; "
                   "restarting in 2s", flush=True)

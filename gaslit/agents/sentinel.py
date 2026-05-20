@@ -62,6 +62,7 @@ from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.graph import END, START, StateGraph
 
 from gaslit.agents.sentinel_fallback import compute_drift
+from gaslit.agents.eval_debounce import PendingEval, due_memory_ids, schedule_eval
 from gaslit.agents.sentinel_nemotron import explain_drift
 from gaslit.schemas import (
     AGENT_REGISTRY,
@@ -83,7 +84,6 @@ logging.basicConfig(
 )
 
 SENTINEL_MODE = os.environ.get("SENTINEL_MODE", "local").lower()
-EVAL_DEBOUNCE_S = 0.5
 
 
 # ─── State ───────────────────────────────────────────────────────────
@@ -245,6 +245,33 @@ _worker_lock = threading.Lock()
 _run_id: Optional[str] = None
 
 
+def _invoke_graph(graph, memory_id: str, run_id: str) -> None:
+    thread_id = f"sentinel-{memory_id}"
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        graph.invoke(
+            {
+                "memory_id": memory_id,
+                "sentinel_run_id": run_id,
+            },
+            config=config,
+        )
+    except Exception as invoke_exc:
+        log.warning("graph invoke failed for %s: %s", memory_id, invoke_exc)
+
+
+def _flush_due_evaluations(
+    pending_eval: PendingEval,
+    graph,
+    run_id: str,
+    stop_event: threading.Event,
+) -> None:
+    for mid in due_memory_ids(pending_eval, time.time()):
+        if stop_event.is_set():
+            return
+        _invoke_graph(graph, mid, run_id)
+
+
 def _watch_loop(stop_event: threading.Event, run_id: str) -> None:
     client = _client()
     db = client[DB_NAME]
@@ -263,37 +290,25 @@ def _watch_loop(stop_event: threading.Event, run_id: str) -> None:
     log.info("sentinel watching %s.%s run_id=%s mode=%s",
              DB_NAME, RETRIEVAL_LOG, run_id, SENTINEL_MODE)
 
-    last_eval: dict[str, float] = {}
+    pending_eval: PendingEval = {}
     pipeline = [{"$match": {"operationType": "insert"}}]
 
     while not stop_event.is_set():
         try:
-            with db[RETRIEVAL_LOG].watch(pipeline, max_await_time_ms=1000) as stream:
-                for change in stream:
-                    if stop_event.is_set():
-                        break
+            with db[RETRIEVAL_LOG].watch(pipeline, max_await_time_ms=200) as stream:
+                while not stop_event.is_set():
+                    change = stream.try_next()
+                    if change is None:
+                        _flush_due_evaluations(pending_eval, graph, run_id, stop_event)
+                        time.sleep(0.05)
+                        continue
+
                     doc = change.get("fullDocument") or {}
                     mid = doc.get("memory_id")
                     if not mid:
                         continue
-                    now = time.time()
-                    if mid in last_eval and now - last_eval[mid] < EVAL_DEBOUNCE_S:
-                        continue
-                    last_eval[mid] = now
-
-                    thread_id = f"sentinel-{mid}"
-                    config = {"configurable": {"thread_id": thread_id}}
-                    try:
-                        graph.invoke(
-                            {
-                                "memory_id": mid,
-                                "sentinel_run_id": run_id,
-                            },
-                            config=config,
-                        )
-                    except Exception as invoke_exc:
-                        log.warning("graph invoke failed for %s: %s",
-                                    mid, invoke_exc)
+                    schedule_eval(pending_eval, mid, time.time())
+                    _flush_due_evaluations(pending_eval, graph, run_id, stop_event)
         except Exception as exc:
             if stop_event.is_set():
                 break
