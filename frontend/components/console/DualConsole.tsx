@@ -46,20 +46,25 @@ export function DualConsole({
   const [leftVerdict, setLeftVerdict] = useState<Verdict>("idle");
   const [rightVerdict, setRightVerdict] = useState<Verdict>("idle");
   const [leftBalance, setLeftBalance] = useState(TREASURY_INITIAL);
-  const [busy, setBusy] = useState(false);
+  const [, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const turnCounter = useRef(1);
   const threadId = useRef(`t_console_${Math.random().toString(36).slice(2, 10)}`);
 
   function addLeft(t: ChatTurn) { setLeftLog((p) => [...p, t]); }
   function addRight(t: ChatTurn) { setRightLog((p) => [...p, t]); }
+  function setConsoleBusy(next: boolean) {
+    busyRef.current = next;
+    setBusy(next);
+    onBusyChange?.(next);
+  }
 
   async function send(
     message: string,
     opts?: { user_id?: string; thread_id?: string; turn_number?: number; tool_name?: string },
   ) {
-    if (!message.trim() || busy) return {};
-    setBusy(true);
-    onBusyChange?.(true);
+    if (!message.trim() || busyRef.current) return {};
+    setConsoleBusy(true);
     setLeftVerdict("thinking");
     setRightVerdict("thinking");
 
@@ -123,8 +128,7 @@ export function DualConsole({
       addRight({ id: `${id}_ra`, who: "agent", text: `[error] ${r.reason}`, ts: Date.now() });
     }
 
-    setBusy(false);
-    onBusyChange?.(false);
+    setConsoleBusy(false);
     return { left: leftRes, right: rightRes };
   }
 

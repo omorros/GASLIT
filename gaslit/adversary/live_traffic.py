@@ -67,7 +67,7 @@ def load_canned() -> list[str]:
 def stream_traffic(duration_s: int = 60, qps: float = 1.0,
                    *, source: str = "canned") -> int:
     """Send queries at ~qps for duration_s seconds. Returns the number sent."""
-    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8002')}"
     queries: list[str]
     if source == "live":
         try:

@@ -17,7 +17,7 @@ load_dotenv(ROOT / ".env")
 
 
 def main() -> None:
-    base = os.environ.get("NEXT_PUBLIC_API_BASE", "http://127.0.0.1:8000").rstrip("/")
+    base = os.environ.get("NEXT_PUBLIC_API_BASE", "http://127.0.0.1:8002").rstrip("/")
     url = f"{base}/api/livekit/token"
     body = json.dumps({"room": "attacker_room", "identity": "smoke-test"}).encode()
     req = urllib.request.Request(
