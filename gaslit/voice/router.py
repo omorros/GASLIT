@@ -83,7 +83,10 @@ async def voice_input(body: VoiceInputPayload) -> JSONResponse:
     result = await on_voice_transcript(
         event["transcript"],
         room=body.room,
-        source=body.source,
+        source=event["source"],
+        user_id=event["user_id"],
+        thread_id=event["thread_id"],
+        turn_number=event["turn_number"],
     )
     return JSONResponse(result)
 
