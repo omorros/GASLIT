@@ -216,18 +216,38 @@ def test_voice_transcripts_do_not_reuse_the_same_scribe_turn():
 
 
 def test_voice_payload_accepts_explicit_scribe_identity():
-    from gaslit.voice.livekit_handler import VoiceInputPayload, to_scribe_event
+    class FakeBaseModel:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
 
-    event = to_scribe_event(
-        VoiceInputPayload(
-            transcript="  Keep   this  ",
-            source="fallback",
-            room="attacker_room",
-            user_id="u_custom",
-            thread_id="t_custom",
-            turn_number=42,
+    replacements = {
+        "pydantic": _module(
+            "pydantic",
+            BaseModel=FakeBaseModel,
+            Field=lambda default=None, **kwargs: default,
         )
-    )
+    }
+
+    old_handler = sys.modules.pop("gaslit.voice.livekit_handler", _MISSING)
+    try:
+        with _patched_modules(replacements):
+            from gaslit.voice.livekit_handler import VoiceInputPayload, to_scribe_event
+
+            event = to_scribe_event(
+                VoiceInputPayload(
+                    transcript="  Keep   this  ",
+                    source="fallback",
+                    room="attacker_room",
+                    user_id="u_custom",
+                    thread_id="t_custom",
+                    turn_number=42,
+                )
+            )
+    finally:
+        sys.modules.pop("gaslit.voice.livekit_handler", None)
+        if old_handler is not _MISSING:
+            sys.modules["gaslit.voice.livekit_handler"] = old_handler
 
     assert event == {
         "transcript": "Keep this",
