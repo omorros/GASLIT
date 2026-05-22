@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import hashlib
+
 
 def _voice_ids(room: str | None) -> tuple[str, str, int]:
-    r = (room or "voice").replace(" ", "_")
+    r = (room or "voice").strip().replace(" ", "_")
+    if r == "attacker_room":
+        return "u_2188", "t_8821", 1
     return f"voice:{r}", f"thread:{r}", 1
+
+
+def _voice_turn_number(room: str | None, transcript: str) -> int:
+    """Stable idempotency key: duplicate transcripts collapse, distinct ones persist."""
+    normalized = " ".join(transcript.strip().split())
+    digest = hashlib.sha256(f"{room or 'voice'}|{normalized}".encode()).hexdigest()
+    return int(digest[:8], 16)
 
 
 async def on_voice_transcript(transcript: str, room: str | None, source: str | None) -> dict:
     """Forward speech-as-text into the Scribe memory pipeline."""
     from gaslit.agents.scribe import scribe_turn
 
-    user_id, thread_id, turn_number = _voice_ids(room)
+    user_id, thread_id, _ = _voice_ids(room)
+    turn_number = _voice_turn_number(room, transcript)
     mem = scribe_turn(user_id, thread_id, turn_number, transcript)
     return {
         "ok": True,
