@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -189,6 +190,10 @@ def answer_qa(question: str, quarantine_id: str) -> str:
 
 
 # ─── Change Stream watcher (run as daemon if desired) ─────────────────
+def _needs_dossier(doc: dict) -> bool:
+    return bool(doc.get("quarantine_id")) and not doc.get("dossier_composed_at")
+
+
 def watch_quarantine_stream() -> None:
     """Subscribe to quarantine inserts; compose dossier for each new entry.
 
@@ -197,15 +202,25 @@ def watch_quarantine_stream() -> None:
     broadcasts the quarantine event downstream.
     """
     db = _db()
-    pipeline = [{"$match": {"operationType": "insert"}}]
+    pipeline = [{
+        "$match": {"operationType": {"$in": ["insert", "update", "replace"]}},
+    }]
     print("[forensic_auditor] watching quarantine inserts...")
-    with db[QUARANTINE].watch(pipeline, full_document="updateLookup") as stream:
-        for change in stream:
-            doc = change.get("fullDocument") or {}
-            if doc.get("dossier_text"):
-                continue
-            try:
-                compose_dossier(doc)
-                print(f"[forensic_auditor] dossier composed for {doc.get('quarantine_id')}")
-            except Exception as e:
-                print(f"[forensic_auditor] error composing dossier: {e}")
+    while True:
+        try:
+            with db[QUARANTINE].watch(pipeline, full_document="updateLookup") as stream:
+                for change in stream:
+                    doc = change.get("fullDocument") or {}
+                    if not _needs_dossier(doc):
+                        continue
+                    try:
+                        compose_dossier(doc)
+                        print(
+                            "[forensic_auditor] dossier composed for "
+                            f"{doc.get('quarantine_id')}"
+                        )
+                    except Exception as e:
+                        print(f"[forensic_auditor] error composing dossier: {e}")
+        except Exception as e:
+            print(f"[forensic_auditor] watcher error: {e!r}; restarting in 2s")
+            time.sleep(2)
