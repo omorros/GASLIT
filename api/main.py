@@ -18,6 +18,7 @@ from __future__ import annotations
 
 # ─── Load env first (repo root + frontend/.env.local) before any project imports ─
 import os
+import ipaddress
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -35,7 +36,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
@@ -166,7 +167,7 @@ def unprotected_agent(req: AgentRequest):
     try:
         memories = retrieve_unprotected(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "unprotected"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -194,7 +195,7 @@ def gaslit_agent(req: AgentRequest):
     try:
         audit = retrieve_with_audit(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "librarian"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -254,6 +255,8 @@ def trust_score():
 import uuid as _uuid
 
 _FLOOD_RUNS: dict[str, dict[str, Any]] = {}
+_FLOOD_LOCK = threading.Lock()
+_MAX_FLOOD_RUNS = 50
 
 
 class FloodRequest(BaseModel):
@@ -269,34 +272,84 @@ class FloodResponse(BaseModel):
     source: str
 
 
+def _is_loopback_client(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == "localhost"
+
+
+def _authorize_flood_request(request: Request) -> None:
+    token = os.environ.get("SCENARIO_FLOOD_TOKEN", "").strip()
+    if token and request.headers.get("x-gaslit-demo-token") == token:
+        return
+    if _is_loopback_client(request):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="scenario flood is restricted to localhost or requests with SCENARIO_FLOOD_TOKEN",
+    )
+
+
+def _active_flood_run() -> str | None:
+    for run_id, run in _FLOOD_RUNS.items():
+        if run.get("status") == "running":
+            return run_id
+    return None
+
+
+def _trim_flood_runs() -> None:
+    if len(_FLOOD_RUNS) <= _MAX_FLOOD_RUNS:
+        return
+    for run_id in list(_FLOOD_RUNS):
+        if len(_FLOOD_RUNS) <= _MAX_FLOOD_RUNS:
+            return
+        if _FLOOD_RUNS[run_id].get("status") != "running":
+            del _FLOOD_RUNS[run_id]
+
+
 @app.post("/api/scenario/flood", response_model=FloodResponse, status_code=202)
-def scenario_flood(req: FloodRequest = FloodRequest()):
+def scenario_flood(request: Request, req: FloodRequest = FloodRequest()):
     """Burst paired requests into both agents to drive cohort variance / drift.
 
     Wraps `gaslit.adversary.live_traffic.stream_traffic` in a daemon thread.
     Used by the Operator Console "Flood" scenario to make the drift gauge climb.
     """
+    _authorize_flood_request(request)
     from gaslit.adversary.live_traffic import stream_traffic
-    run_id = f"flood_{_uuid.uuid4().hex[:8]}"
-    _FLOOD_RUNS[run_id] = {
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "duration_s": req.duration_s,
-        "qps": req.qps,
-        "source": req.source,
-        "status": "running",
-        "sent": 0,
-    }
+
+    with _FLOOD_LOCK:
+        active_run = _active_flood_run()
+        if active_run:
+            raise HTTPException(
+                status_code=429,
+                detail=f"scenario flood already running: {active_run}",
+            )
+        _trim_flood_runs()
+        run_id = f"flood_{_uuid.uuid4().hex[:8]}"
+        _FLOOD_RUNS[run_id] = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "duration_s": req.duration_s,
+            "qps": req.qps,
+            "source": req.source,
+            "status": "running",
+            "sent": 0,
+        }
 
     def _run() -> None:
         try:
             sent = stream_traffic(req.duration_s, req.qps, source=req.source)
-            _FLOOD_RUNS[run_id]["sent"] = int(sent)
-            _FLOOD_RUNS[run_id]["status"] = "completed"
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["sent"] = int(sent)
+                _FLOOD_RUNS[run_id]["status"] = "completed"
         except Exception as exc:
-            _FLOOD_RUNS[run_id]["status"] = "error"
-            _FLOOD_RUNS[run_id]["error"] = repr(exc)
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["status"] = "error"
+                _FLOOD_RUNS[run_id]["error"] = repr(exc)
         finally:
-            _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
 
     threading.Thread(target=_run, daemon=True, name=run_id).start()
     return FloodResponse(
@@ -305,8 +358,10 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
 
 
 @app.get("/api/scenario/flood/{run_id}")
-def scenario_flood_status(run_id: str):
-    return _FLOOD_RUNS.get(run_id, {"status": "unknown"})
+def scenario_flood_status(run_id: str, request: Request):
+    _authorize_flood_request(request)
+    with _FLOOD_LOCK:
+        return dict(_FLOOD_RUNS.get(run_id, {"status": "unknown"}))
 
 
 # ─── Optional routers from teammates / sibling modules ────────────────

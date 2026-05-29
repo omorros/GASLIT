@@ -37,6 +37,7 @@ export function DossierPanel({
   const [audio, setAudio] = useState<"idle" | "loading" | "playing" | "muted" | "error">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingRef = useRef(false);
+  const mountedRef = useRef(true);
   const idRef = useRef(0);
 
   function enqueue(text: string) {
@@ -44,25 +45,33 @@ export function DossierPanel({
     setQueue((q) => [...q, { id: ++idRef.current, text }]);
   }
 
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      playingRef.current = false;
+      audioRef.current?.pause();
+    };
+  }, []);
+
   // Drain queue serially
   useEffect(() => {
     if (playingRef.current) return;
     const head = queue[0];
     if (!head) return;
-    let cancelled = false;
     (async () => {
       playingRef.current = true;
       setNow(head);
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        if (!mountedRef.current) return;
         const blob = new Blob([buf], { type: "audio/mpeg" });
         const url = URL.createObjectURL(blob);
         const a = new Audio(url);
         audioRef.current = a;
         a.onended = () => {
           URL.revokeObjectURL(url);
+          if (!mountedRef.current) return;
           playingRef.current = false;
           setAudio("idle");
           setNow(null);
@@ -70,23 +79,22 @@ export function DossierPanel({
         };
         a.onerror = () => {
           URL.revokeObjectURL(url);
+          if (!mountedRef.current) return;
           playingRef.current = false;
           setAudio("error");
           setNow(null);
           setQueue((q) => q.slice(1));
         };
         await a.play();
-        if (!cancelled) setAudio("playing");
+        if (mountedRef.current) setAudio("playing");
       } catch {
+        if (!mountedRef.current) return;
         playingRef.current = false;
         setAudio("error");
         setNow(null);
         setQueue((q) => q.slice(1));
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [queue]);
 
   // Auto-readout when a new quarantine arrives
