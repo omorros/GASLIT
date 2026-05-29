@@ -46,6 +46,13 @@ export default function ConsolePage() {
     [dualSend],
   );
 
+  const resetSimulation = useCallback(() => {
+    scenario.reset();
+    dualHandleRef.current?.reset();
+    ev.reset();
+    setScribeBusy(false);
+  }, [ev, scenario]);
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--op-bg)] text-[var(--op-text)]">
       {/* Top bar */}
@@ -91,7 +98,7 @@ export default function ConsolePage() {
           busy={scenario.state.busy}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetSimulation}
         />
 
         {/* Storyline narrative + drift gauge */}
