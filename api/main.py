@@ -166,7 +166,7 @@ def unprotected_agent(req: AgentRequest):
     try:
         memories = retrieve_unprotected(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "unprotected"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -194,7 +194,7 @@ def gaslit_agent(req: AgentRequest):
     try:
         audit = retrieve_with_audit(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "librarian"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -254,11 +254,16 @@ def trust_score():
 import uuid as _uuid
 
 _FLOOD_RUNS: dict[str, dict[str, Any]] = {}
+_FLOOD_LOCK = threading.Lock()
+_FLOOD_MAX_ACTIVE = 1
+_FLOOD_MAX_STORED = 25
+_FLOOD_ALLOW_LIVE = os.environ.get("SCENARIO_FLOOD_ALLOW_LIVE", "0") == "1"
+_FLOOD_DONE_STATUSES = {"completed", "error"}
 
 
 class FloodRequest(BaseModel):
-    duration_s: int = Field(default=15, ge=2, le=120)
-    qps: float = Field(default=5.0, ge=0.2, le=15.0)
+    duration_s: int = Field(default=15, ge=2, le=30)
+    qps: float = Field(default=2.0, ge=0.2, le=3.0)
     source: str = Field(default="canned", pattern="^(canned|live)$")
 
 
@@ -269,6 +274,26 @@ class FloodResponse(BaseModel):
     source: str
 
 
+def _active_flood_count_unlocked() -> int:
+    return sum(1 for run in _FLOOD_RUNS.values() if run.get("status") == "running")
+
+
+def _trim_flood_runs_unlocked() -> None:
+    overflow = len(_FLOOD_RUNS) - _FLOOD_MAX_STORED
+    if overflow <= 0:
+        return
+    completed = sorted(
+        (
+            (run_id, run.get("completed_at") or run.get("started_at") or "")
+            for run_id, run in _FLOOD_RUNS.items()
+            if run.get("status") in _FLOOD_DONE_STATUSES
+        ),
+        key=lambda item: item[1],
+    )
+    for run_id, _ in completed[:overflow]:
+        _FLOOD_RUNS.pop(run_id, None)
+
+
 @app.post("/api/scenario/flood", response_model=FloodResponse, status_code=202)
 def scenario_flood(req: FloodRequest = FloodRequest()):
     """Burst paired requests into both agents to drive cohort variance / drift.
@@ -276,27 +301,42 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
     Wraps `gaslit.adversary.live_traffic.stream_traffic` in a daemon thread.
     Used by the Operator Console "Flood" scenario to make the drift gauge climb.
     """
+    if req.source == "live" and not _FLOOD_ALLOW_LIVE:
+        raise HTTPException(
+            status_code=403,
+            detail="live flood generation is disabled; set SCENARIO_FLOOD_ALLOW_LIVE=1 to enable it",
+        )
+
     from gaslit.adversary.live_traffic import stream_traffic
-    run_id = f"flood_{_uuid.uuid4().hex[:8]}"
-    _FLOOD_RUNS[run_id] = {
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "duration_s": req.duration_s,
-        "qps": req.qps,
-        "source": req.source,
-        "status": "running",
-        "sent": 0,
-    }
+
+    with _FLOOD_LOCK:
+        if _active_flood_count_unlocked() >= _FLOOD_MAX_ACTIVE:
+            raise HTTPException(status_code=429, detail="a scenario flood is already running")
+        run_id = f"flood_{_uuid.uuid4().hex[:8]}"
+        _FLOOD_RUNS[run_id] = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "duration_s": req.duration_s,
+            "qps": req.qps,
+            "source": req.source,
+            "status": "running",
+            "sent": 0,
+        }
+        _trim_flood_runs_unlocked()
 
     def _run() -> None:
         try:
             sent = stream_traffic(req.duration_s, req.qps, source=req.source)
-            _FLOOD_RUNS[run_id]["sent"] = int(sent)
-            _FLOOD_RUNS[run_id]["status"] = "completed"
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["sent"] = int(sent)
+                _FLOOD_RUNS[run_id]["status"] = "completed"
         except Exception as exc:
-            _FLOOD_RUNS[run_id]["status"] = "error"
-            _FLOOD_RUNS[run_id]["error"] = repr(exc)
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["status"] = "error"
+                _FLOOD_RUNS[run_id]["error"] = repr(exc)
         finally:
-            _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+                _trim_flood_runs_unlocked()
 
     threading.Thread(target=_run, daemon=True, name=run_id).start()
     return FloodResponse(
@@ -306,7 +346,8 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
 
 @app.get("/api/scenario/flood/{run_id}")
 def scenario_flood_status(run_id: str):
-    return _FLOOD_RUNS.get(run_id, {"status": "unknown"})
+    with _FLOOD_LOCK:
+        return dict(_FLOOD_RUNS.get(run_id, {"status": "unknown"}))
 
 
 # ─── Optional routers from teammates / sibling modules ────────────────

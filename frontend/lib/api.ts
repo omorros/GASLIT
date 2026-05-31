@@ -201,7 +201,7 @@ export type FloodLaunch = { run_id: string; duration_s: number; qps: number; sou
 
 export async function postScenarioFlood(
   durationS = 15,
-  qps = 5,
+  qps = 2,
   source: "canned" | "live" = "canned",
 ): Promise<FloodLaunch> {
   const r = await apiFetch(apiUrl("/api/scenario/flood"), {
