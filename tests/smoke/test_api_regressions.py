@@ -99,6 +99,8 @@ def _install_api_dependency_stubs() -> type[Exception]:
 
     pymongo = types.ModuleType("pymongo")
     pymongo.MongoClient = MongoClient
+    pymongo_errors = types.ModuleType("pymongo.errors")
+    pymongo_errors.DuplicateKeyError = type("DuplicateKeyError", (Exception,), {})
     pymongo_database = types.ModuleType("pymongo.database")
     pymongo_database.Database = object
 
@@ -110,6 +112,7 @@ def _install_api_dependency_stubs() -> type[Exception]:
     sys.modules.setdefault("fastapi.middleware.cors", fastapi_cors)
     sys.modules.setdefault("pydantic", pydantic)
     sys.modules.setdefault("pymongo", pymongo)
+    sys.modules.setdefault("pymongo.errors", pymongo_errors)
     sys.modules.setdefault("pymongo.database", pymongo_database)
     sys.modules.setdefault("dotenv", dotenv)
     return HTTPException
