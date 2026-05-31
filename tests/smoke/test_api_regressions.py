@@ -13,7 +13,109 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from fastapi import HTTPException
+
+def _install_api_dependency_stubs() -> type[Exception]:
+    """Let this smoke test import api.main without installing the web stack."""
+
+    class HTTPException(Exception):
+        def __init__(self, status_code: int, detail: str | None = None):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class FastAPI:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add_middleware(self, *args, **kwargs) -> None:
+            pass
+
+        def include_router(self, *args, **kwargs) -> None:
+            pass
+
+        def on_event(self, *args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def post(self, *args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def get(self, *args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+    class CORSMiddleware:
+        pass
+
+    class FieldInfo:
+        def __init__(self, default=None):
+            self.default = default
+
+    def Field(default=None, **_kwargs):
+        return FieldInfo(default)
+
+    class BaseModel:
+        def __init__(self, **kwargs):
+            for cls in reversed(type(self).mro()):
+                for name in getattr(cls, "__annotations__", {}):
+                    default = getattr(type(self), name, None)
+                    if isinstance(default, FieldInfo):
+                        default = default.default
+                    if name in kwargs:
+                        setattr(self, name, kwargs.pop(name))
+                    elif default is not None:
+                        setattr(self, name, default)
+            for name, value in kwargs.items():
+                setattr(self, name, value)
+
+    def Query(default=None, **_kwargs):
+        return default
+
+    class MongoClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __getitem__(self, _name):
+            return {}
+
+    fastapi = types.ModuleType("fastapi")
+    fastapi.FastAPI = FastAPI
+    fastapi.HTTPException = HTTPException
+    fastapi.Query = Query
+    fastapi_middleware = types.ModuleType("fastapi.middleware")
+    fastapi_cors = types.ModuleType("fastapi.middleware.cors")
+    fastapi_cors.CORSMiddleware = CORSMiddleware
+
+    pydantic = types.ModuleType("pydantic")
+    pydantic.BaseModel = BaseModel
+    pydantic.Field = Field
+
+    pymongo = types.ModuleType("pymongo")
+    pymongo.MongoClient = MongoClient
+    pymongo_database = types.ModuleType("pymongo.database")
+    pymongo_database.Database = object
+
+    dotenv = types.ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *args, **kwargs: None
+
+    sys.modules.setdefault("fastapi", fastapi)
+    sys.modules.setdefault("fastapi.middleware", fastapi_middleware)
+    sys.modules.setdefault("fastapi.middleware.cors", fastapi_cors)
+    sys.modules.setdefault("pydantic", pydantic)
+    sys.modules.setdefault("pymongo", pymongo)
+    sys.modules.setdefault("pymongo.database", pymongo_database)
+    sys.modules.setdefault("dotenv", dotenv)
+    return HTTPException
+
+
+HTTPException = _install_api_dependency_stubs()
 
 import api.main as api_main
 
