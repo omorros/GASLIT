@@ -189,6 +189,11 @@ def answer_qa(question: str, quarantine_id: str) -> str:
 
 
 # ─── Change Stream watcher (run as daemon if desired) ─────────────────
+def _needs_dossier_composition(quarantine_doc: dict) -> bool:
+    """Nemotron may prefill dossier_text; Sonnet enrichment is complete only after this timestamp."""
+    return not bool(quarantine_doc.get("dossier_composed_at"))
+
+
 def watch_quarantine_stream() -> None:
     """Subscribe to quarantine inserts; compose dossier for each new entry.
 
@@ -202,7 +207,7 @@ def watch_quarantine_stream() -> None:
     with db[QUARANTINE].watch(pipeline, full_document="updateLookup") as stream:
         for change in stream:
             doc = change.get("fullDocument") or {}
-            if doc.get("dossier_text"):
+            if not _needs_dossier_composition(doc):
                 continue
             try:
                 compose_dossier(doc)

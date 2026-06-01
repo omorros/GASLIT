@@ -192,10 +192,14 @@ def _quarantine_node(state: SentinelState) -> SentinelState:
         db[QUARANTINE].insert_one(doc)
         written = True
     except DuplicateKeyError:
-        # Update dossier text if the explanation is richer than a stub.
+        # Update the initial explanation only until the Forensic Auditor has
+        # replaced it with the full dossier.
         if state.get("nemotron_explanation"):
             db[QUARANTINE].update_one(
-                {"quarantine_id": qid},
+                {
+                    "quarantine_id": qid,
+                    "dossier_composed_at": {"$exists": False},
+                },
                 {"$set": {"dossier_text": state["nemotron_explanation"]}},
             )
 
