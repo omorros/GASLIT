@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -188,24 +189,54 @@ def answer_qa(question: str, quarantine_id: str) -> str:
     return response.content[0].text.strip()
 
 
+def _should_compose_dossier(doc: dict) -> bool:
+    """Forensic owns final dossier composition; Sentinel may add a stub first."""
+    return bool(doc.get("quarantine_id")) and not doc.get("dossier_composed_at")
+
+
+def _process_quarantine_doc(doc: dict) -> bool:
+    if not _should_compose_dossier(doc):
+        return False
+    try:
+        compose_dossier(doc)
+        print(f"[forensic_auditor] dossier composed for {doc.get('quarantine_id')}")
+        return True
+    except Exception as e:
+        print(f"[forensic_auditor] error composing dossier: {e}")
+        return False
+
+
 # ─── Change Stream watcher (run as daemon if desired) ─────────────────
-def watch_quarantine_stream() -> None:
+def watch_quarantine_stream(
+    stop_event: Optional[threading.Event] = None,
+    retry_delay_s: float = 2.0,
+) -> None:
     """Subscribe to quarantine inserts; compose dossier for each new entry.
 
     Runs forever. Used as a background task launched from `api/main.py`'s
     startup event so the dossier text is in place by the time the WS bridge
     broadcasts the quarantine event downstream.
     """
+    stop_event = stop_event or threading.Event()
     db = _db()
-    pipeline = [{"$match": {"operationType": "insert"}}]
-    print("[forensic_auditor] watching quarantine inserts...")
-    with db[QUARANTINE].watch(pipeline, full_document="updateLookup") as stream:
-        for change in stream:
-            doc = change.get("fullDocument") or {}
-            if doc.get("dossier_text"):
-                continue
-            try:
-                compose_dossier(doc)
-                print(f"[forensic_auditor] dossier composed for {doc.get('quarantine_id')}")
-            except Exception as e:
-                print(f"[forensic_auditor] error composing dossier: {e}")
+    pipeline = [{"$match": {"operationType": {"$in": ["insert", "replace", "update"]}}}]
+    print("[forensic_auditor] watching quarantine changes...")
+    while not stop_event.is_set():
+        try:
+            with db[QUARANTINE].watch(
+                pipeline,
+                full_document="updateLookup",
+                max_await_time_ms=1000,
+            ) as stream:
+                for change in stream:
+                    if stop_event.is_set():
+                        break
+                    _process_quarantine_doc(change.get("fullDocument") or {})
+        except Exception as e:
+            if stop_event.is_set():
+                break
+            print(
+                f"[forensic_auditor] change-stream error: {type(e).__name__}: {e}; "
+                f"restarting in {retry_delay_s:g}s"
+            )
+            stop_event.wait(retry_delay_s)
