@@ -21,6 +21,7 @@ export default function ConsolePage() {
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
   const [scribeBusy, setScribeBusy] = useState(false);
+  const [dossierRunKey, setDossierRunKey] = useState(0);
 
   const onHandle = useCallback((h: DualConsoleHandle) => {
     dualHandleRef.current = h;
@@ -38,6 +39,14 @@ export default function ConsolePage() {
   const spec = scenario.spec;
   const latestQuarantine = ev.quarantines[0];
   const sentinelOnline = sentinel?.status === "online";
+
+  const resetScenario = useCallback(() => {
+    scenario.reset();
+    dualHandleRef.current?.reset();
+    ev.reset();
+    setScribeBusy(false);
+    setDossierRunKey((key) => key + 1);
+  }, [ev, scenario]);
 
   const manualSend = useCallback(
     async (message: string, user_id: string) => {
@@ -91,7 +100,7 @@ export default function ConsolePage() {
           busy={scenario.state.busy}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetScenario}
         />
 
         {/* Storyline narrative + drift gauge */}
@@ -159,7 +168,7 @@ export default function ConsolePage() {
         </section>
 
         {/* Forensic dossier + interactive Q&A — only meaningful after Day 4 */}
-        <DossierPanel latest={latestQuarantine} />
+        <DossierPanel key={dossierRunKey} latest={latestQuarantine} />
       </main>
     </div>
   );
