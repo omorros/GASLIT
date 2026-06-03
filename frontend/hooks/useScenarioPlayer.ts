@@ -133,6 +133,7 @@ export type ScenarioHandlers = {
 
 export function useScenarioPlayer(handlers: ScenarioHandlers) {
   const [state, setState] = useState<ScenarioState>({ currentDay: 0, busy: false });
+  const advancingRef = useRef(false);
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
@@ -145,9 +146,13 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
   }, [state.currentDay, totalDays]);
 
   const advance = useCallback(async () => {
-    if (state.busy) return;
+    if (state.busy || advancingRef.current) return;
+    advancingRef.current = true;
     const next = state.currentDay + 1;
-    if (next > totalDays) return;
+    if (next > totalDays) {
+      advancingRef.current = false;
+      return;
+    }
     setState({ currentDay: next, busy: true });
 
     const spec = SCENARIO_DAYS[next - 1];
@@ -169,11 +174,13 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
         }
       }
     } finally {
+      advancingRef.current = false;
       setState({ currentDay: next, busy: false });
     }
   }, [state.busy, state.currentDay, totalDays]);
 
   const reset = useCallback(() => {
+    advancingRef.current = false;
     setState({ currentDay: 0, busy: false });
   }, []);
 
