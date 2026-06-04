@@ -21,6 +21,7 @@ export default function ConsolePage() {
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
   const dispatchLockRef = useRef(false);
+  const recentDispatchRef = useRef<{ key: string; ts: number } | null>(null);
   const [scribeBusy, setScribeBusy] = useState(false);
   const [dossierPanelKey, setDossierPanelKey] = useState(0);
 
@@ -34,6 +35,15 @@ export default function ConsolePage() {
         throw new Error("Dual console is still initialising. Please retry once the page finishes loading.");
       }
       if (dispatchLockRef.current) return {};
+      const key = `${opts?.user_id ?? ""}|${opts?.turn_number ?? ""}|${message.trim()}`;
+      const now = Date.now();
+      if (
+        recentDispatchRef.current?.key === key &&
+        now - recentDispatchRef.current.ts < 3000
+      ) {
+        return {};
+      }
+      recentDispatchRef.current = { key, ts: now };
       dispatchLockRef.current = true;
       try {
         return await dualHandleRef.current.send(message, opts);
@@ -58,6 +68,7 @@ export default function ConsolePage() {
 
   const resetSimulation = useCallback(() => {
     dispatchLockRef.current = false;
+    recentDispatchRef.current = null;
     scenario.reset();
     dualHandleRef.current?.reset();
     ev.reset();
