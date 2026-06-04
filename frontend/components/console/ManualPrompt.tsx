@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const PRESETS = [
@@ -43,7 +43,14 @@ export function ManualPrompt({
   const [text, setText] = useState("");
   const [localBusy, setLocalBusy] = useState(false);
   const sendingRef = useRef(false);
+  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dispatchBusy = busy || localBusy;
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
+    };
+  }, []);
 
   function dispatch(message: string, who: string) {
     if (!message.trim() || dispatchBusy || sendingRef.current) return;
@@ -59,8 +66,13 @@ export function ManualPrompt({
     sendingRef.current = true;
     setLocalBusy(true);
     void Promise.resolve(onSend(message.trim(), who.trim() || "u_demo")).finally(() => {
-      sendingRef.current = false;
-      setLocalBusy(false);
+      const remaining = Math.max(0, MANUAL_DUPLICATE_WINDOW_MS - (Date.now() - now));
+      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current);
+      cooldownTimerRef.current = setTimeout(() => {
+        sendingRef.current = false;
+        setLocalBusy(false);
+        cooldownTimerRef.current = null;
+      }, remaining);
     });
     setText("");
   }
