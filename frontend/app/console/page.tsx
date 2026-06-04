@@ -14,13 +14,18 @@ import { DossierPanel } from "@/components/console/DossierPanel";
 import { ManualPrompt } from "@/components/console/ManualPrompt";
 import { EventTape } from "@/components/console/EventTape";
 
+const DUPLICATE_DISPATCH_WINDOW_MS = 10_000;
+
 export default function ConsolePage() {
   const ev = useGaslitEvents();
   const trust = useTrustScore(4000);
   const { status: sentinel } = useSentinelStatus(3000);
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
+  const dispatchLockRef = useRef(false);
+  const recentDispatchRef = useRef<{ key: string; ts: number } | null>(null);
   const [scribeBusy, setScribeBusy] = useState(false);
+  const [dossierPanelKey, setDossierPanelKey] = useState(0);
 
   const onHandle = useCallback((h: DualConsoleHandle) => {
     dualHandleRef.current = h;
@@ -28,8 +33,25 @@ export default function ConsolePage() {
 
   const dualSend = useCallback(
     async (message: string, opts?: { user_id?: string; turn_number?: number }) => {
-      if (!dualHandleRef.current) return {};
-      return await dualHandleRef.current.send(message, opts);
+      if (!dualHandleRef.current) {
+        throw new Error("Dual console is still initialising. Please retry once the page finishes loading.");
+      }
+      if (dispatchLockRef.current) return {};
+      const key = `${opts?.user_id ?? ""}|${opts?.turn_number ?? ""}|${message.trim()}`;
+      const now = Date.now();
+      if (
+        recentDispatchRef.current?.key === key &&
+        now - recentDispatchRef.current.ts < DUPLICATE_DISPATCH_WINDOW_MS
+      ) {
+        return {};
+      }
+      recentDispatchRef.current = { key, ts: now };
+      dispatchLockRef.current = true;
+      try {
+        return await dualHandleRef.current.send(message, opts);
+      } finally {
+        dispatchLockRef.current = false;
+      }
     },
     [],
   );
@@ -45,6 +67,16 @@ export default function ConsolePage() {
     },
     [dualSend],
   );
+
+  const resetSimulation = useCallback(() => {
+    dispatchLockRef.current = false;
+    recentDispatchRef.current = null;
+    scenario.reset();
+    dualHandleRef.current?.reset();
+    ev.reset();
+    setScribeBusy(false);
+    setDossierPanelKey((key) => key + 1);
+  }, [ev, scenario]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--op-bg)] text-[var(--op-text)]">
@@ -89,9 +121,10 @@ export default function ConsolePage() {
           currentDay={scenario.state.currentDay}
           spec={spec}
           busy={scenario.state.busy}
+          error={scenario.state.error}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetSimulation}
         />
 
         {/* Storyline narrative + drift gauge */}
@@ -159,7 +192,7 @@ export default function ConsolePage() {
         </section>
 
         {/* Forensic dossier + interactive Q&A — only meaningful after Day 4 */}
-        <DossierPanel latest={latestQuarantine} />
+        <DossierPanel key={dossierPanelKey} latest={latestQuarantine} />
       </main>
     </div>
   );

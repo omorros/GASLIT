@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -189,23 +190,32 @@ def answer_qa(question: str, quarantine_id: str) -> str:
 
 
 # ─── Change Stream watcher (run as daemon if desired) ─────────────────
+def _needs_dossier(doc: dict) -> bool:
+    return bool(doc) and not doc.get("dossier_composed_at")
+
+
 def watch_quarantine_stream() -> None:
-    """Subscribe to quarantine inserts; compose dossier for each new entry.
+    """Subscribe to quarantine writes; compose dossier for each unfinished entry.
 
     Runs forever. Used as a background task launched from `api/main.py`'s
     startup event so the dossier text is in place by the time the WS bridge
     broadcasts the quarantine event downstream.
     """
     db = _db()
-    pipeline = [{"$match": {"operationType": "insert"}}]
-    print("[forensic_auditor] watching quarantine inserts...")
-    with db[QUARANTINE].watch(pipeline, full_document="updateLookup") as stream:
-        for change in stream:
-            doc = change.get("fullDocument") or {}
-            if doc.get("dossier_text"):
-                continue
-            try:
-                compose_dossier(doc)
-                print(f"[forensic_auditor] dossier composed for {doc.get('quarantine_id')}")
-            except Exception as e:
-                print(f"[forensic_auditor] error composing dossier: {e}")
+    pipeline = [{"$match": {"operationType": {"$in": ["insert", "replace", "update"]}}}]
+    print("[forensic_auditor] watching quarantine changes...")
+    while True:
+        try:
+            with db[QUARANTINE].watch(pipeline, full_document="updateLookup") as stream:
+                for change in stream:
+                    doc = change.get("fullDocument") or {}
+                    if not _needs_dossier(doc):
+                        continue
+                    try:
+                        compose_dossier(doc)
+                        print(f"[forensic_auditor] dossier composed for {doc.get('quarantine_id')}")
+                    except Exception as e:
+                        print(f"[forensic_auditor] error composing dossier: {e}")
+        except Exception as e:
+            print(f"[forensic_auditor] stream error ({type(e).__name__}); restarting in 2s: {e}")
+            time.sleep(2)
