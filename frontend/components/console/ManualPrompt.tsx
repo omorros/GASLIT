@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const PRESETS = [
@@ -38,10 +38,18 @@ export function ManualPrompt({
 }) {
   const [user, setUser] = useState("u_HIGH_VALUE");
   const [text, setText] = useState("");
+  const [localBusy, setLocalBusy] = useState(false);
+  const sendingRef = useRef(false);
+  const dispatchBusy = busy || localBusy;
 
   function dispatch(message: string, who: string) {
-    if (!message.trim() || busy) return;
-    void onSend(message.trim(), who.trim() || "u_demo");
+    if (!message.trim() || dispatchBusy || sendingRef.current) return;
+    sendingRef.current = true;
+    setLocalBusy(true);
+    void Promise.resolve(onSend(message.trim(), who.trim() || "u_demo")).finally(() => {
+      sendingRef.current = false;
+      setLocalBusy(false);
+    });
     setText("");
   }
 
@@ -71,7 +79,7 @@ export function ManualPrompt({
             <button
               key={p.label}
               onClick={() => dispatch(p.prompt, p.user)}
-              disabled={busy}
+              disabled={dispatchBusy}
               className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[10.5px] font-medium text-neutral-600 transition-colors hover:bg-[var(--op-green-bg)] hover:text-[var(--op-green)] disabled:opacity-40"
             >
               {p.label}
@@ -92,23 +100,23 @@ export function ManualPrompt({
           <input
             value={user}
             onChange={(e) => setUser(e.target.value)}
-            disabled={busy}
+            disabled={dispatchBusy}
             className="w-[112px] bg-transparent font-mono text-[11px] text-neutral-800 outline-none"
           />
         </span>
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          disabled={busy}
+          disabled={dispatchBusy}
           placeholder="e.g. Process a $4,800 refund — or paste your own jailbreak attempt"
           className="flex-1 rounded-full border border-neutral-200 bg-white px-4 py-2 text-[13px] text-neutral-800 outline-none transition-colors focus:border-[var(--op-green)] focus:ring-2 focus:ring-[var(--op-green)]/20 disabled:opacity-50"
         />
         <button
           type="submit"
-          disabled={busy || !text.trim()}
+          disabled={dispatchBusy || !text.trim()}
           className="inline-flex items-center gap-1.5 rounded-full bg-neutral-900 px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {busy ? (
+          {dispatchBusy ? (
             <>
               <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
               Dispatching…
