@@ -122,13 +122,14 @@ export const SCENARIO_DAYS: DaySpec[] = [
 export type ScenarioState = {
   currentDay: number; // 0 = start, 1..5 = a day, 6 = done
   busy: boolean;
+  error?: string;
 };
 
 export type ScenarioHandlers = {
   dualSend: (
     message: string,
     opts?: { user_id?: string; turn_number?: number },
-  ) => Promise<unknown>;
+  ) => Promise<{ left?: unknown; right?: unknown }>;
 };
 
 export function useScenarioPlayer(handlers: ScenarioHandlers) {
@@ -146,17 +147,22 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
 
   const advance = useCallback(async () => {
     if (state.busy) return;
+    const previousDay = state.currentDay;
     const next = state.currentDay + 1;
     if (next > totalDays) return;
     setState({ currentDay: next, busy: true });
 
     const spec = SCENARIO_DAYS[next - 1];
+    let succeeded = false;
     try {
       // 1. Fire any paired prompts
       if (spec.prompts) {
         let turn = (next - 1) * 2 + 1;
         for (const p of spec.prompts) {
-          await handlersRef.current.dualSend(p.message, { user_id: p.user_id, turn_number: turn });
+          const result = await handlersRef.current.dualSend(p.message, { user_id: p.user_id, turn_number: turn });
+          if (!result.left && !result.right) {
+            throw new Error("Dual console was not ready to dispatch the scenario prompt.");
+          }
           turn += 1;
         }
       }
@@ -164,12 +170,22 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
       if (spec.backend) {
         for (const action of spec.backend) {
           if (action === "trigger_drift") {
-            await postTriggerDrift().catch(() => null);
+            await postTriggerDrift();
           }
         }
       }
+      succeeded = true;
+    } catch (error) {
+      setState({
+        currentDay: previousDay,
+        busy: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
     } finally {
-      setState({ currentDay: next, busy: false });
+      if (succeeded) {
+        setState({ currentDay: next, busy: false });
+      }
     }
   }, [state.busy, state.currentDay, totalDays]);
 

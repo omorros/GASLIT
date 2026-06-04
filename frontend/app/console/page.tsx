@@ -21,6 +21,7 @@ export default function ConsolePage() {
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
   const [scribeBusy, setScribeBusy] = useState(false);
+  const [dossierPanelKey, setDossierPanelKey] = useState(0);
 
   const onHandle = useCallback((h: DualConsoleHandle) => {
     dualHandleRef.current = h;
@@ -28,7 +29,9 @@ export default function ConsolePage() {
 
   const dualSend = useCallback(
     async (message: string, opts?: { user_id?: string; turn_number?: number }) => {
-      if (!dualHandleRef.current) return {};
+      if (!dualHandleRef.current) {
+        throw new Error("Dual console is still initialising. Please retry once the page finishes loading.");
+      }
       return await dualHandleRef.current.send(message, opts);
     },
     [],
@@ -45,6 +48,14 @@ export default function ConsolePage() {
     },
     [dualSend],
   );
+
+  const resetSimulation = useCallback(() => {
+    scenario.reset();
+    dualHandleRef.current?.reset();
+    ev.reset();
+    setScribeBusy(false);
+    setDossierPanelKey((key) => key + 1);
+  }, [ev, scenario]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--op-bg)] text-[var(--op-text)]">
@@ -89,9 +100,10 @@ export default function ConsolePage() {
           currentDay={scenario.state.currentDay}
           spec={spec}
           busy={scenario.state.busy}
+          error={scenario.state.error}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetSimulation}
         />
 
         {/* Storyline narrative + drift gauge */}
@@ -159,7 +171,7 @@ export default function ConsolePage() {
         </section>
 
         {/* Forensic dossier + interactive Q&A — only meaningful after Day 4 */}
-        <DossierPanel latest={latestQuarantine} />
+        <DossierPanel key={dossierPanelKey} latest={latestQuarantine} />
       </main>
     </div>
   );

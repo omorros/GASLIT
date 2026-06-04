@@ -126,7 +126,9 @@ def retrieve_with_audit(query_text: str, tool_context: dict) -> dict:
     contract = get_contract(db, tool_name)
     query_embedding = embed_query(query_text)
 
-    prefilter: dict[str, Any] = {"quarantined": False}
+    # Quarantined candidates must still enter the protected audit path so the
+    # belief contract can log and explain why it filtered them.
+    prefilter: dict[str, Any] = {}
     if user_id:
         prefilter["user_id"] = user_id
 
@@ -185,7 +187,9 @@ def retrieve_unprotected(query_text: str, tool_context: dict) -> list[dict]:
     agent_id = tool_context.get("agent_id", "unprotected")
 
     query_embedding = embed_query(query_text)
-    prefilter: dict[str, Any] = {"quarantined": False}
+    # The control arm has no belief contract; quarantined memories remain
+    # retrievable here so the demo can show the unprotected blast radius.
+    prefilter: dict[str, Any] = {}
     if user_id:
         prefilter["user_id"] = user_id
 

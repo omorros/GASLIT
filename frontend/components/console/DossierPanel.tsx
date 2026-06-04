@@ -44,50 +44,62 @@ export function DossierPanel({
     setQueue((q) => [...q, { id: ++idRef.current, text }]);
   }
 
+  const queueHead = queue[0];
+
   // Drain queue serially
   useEffect(() => {
     if (playingRef.current) return;
-    const head = queue[0];
+    const head = queueHead;
     if (!head) return;
     let cancelled = false;
+    const finish = (status: "idle" | "error") => {
+      playingRef.current = false;
+      setAudio(status);
+      setNow(null);
+      setQueue((q) => (q[0]?.id === head.id ? q.slice(1) : q));
+    };
     (async () => {
       playingRef.current = true;
       setNow(head);
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        if (cancelled) {
+          playingRef.current = false;
+          return;
+        }
         const blob = new Blob([buf], { type: "audio/mpeg" });
         const url = URL.createObjectURL(blob);
         const a = new Audio(url);
         audioRef.current = a;
         a.onended = () => {
           URL.revokeObjectURL(url);
-          playingRef.current = false;
-          setAudio("idle");
-          setNow(null);
-          setQueue((q) => q.slice(1));
+          finish("idle");
         };
         a.onerror = () => {
           URL.revokeObjectURL(url);
-          playingRef.current = false;
-          setAudio("error");
-          setNow(null);
-          setQueue((q) => q.slice(1));
+          finish("error");
         };
         await a.play();
-        if (!cancelled) setAudio("playing");
+        if (cancelled) {
+          a.pause();
+          URL.revokeObjectURL(url);
+          playingRef.current = false;
+          return;
+        }
+        setAudio("playing");
       } catch {
-        playingRef.current = false;
-        setAudio("error");
-        setNow(null);
-        setQueue((q) => q.slice(1));
+        if (cancelled) {
+          playingRef.current = false;
+          return;
+        }
+        finish("error");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [queue]);
+  }, [queueHead]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);
