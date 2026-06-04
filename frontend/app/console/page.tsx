@@ -14,6 +14,8 @@ import { DossierPanel } from "@/components/console/DossierPanel";
 import { ManualPrompt } from "@/components/console/ManualPrompt";
 import { EventTape } from "@/components/console/EventTape";
 
+const DUPLICATE_DISPATCH_WINDOW_MS = 10_000;
+
 export default function ConsolePage() {
   const ev = useGaslitEvents();
   const trust = useTrustScore(4000);
@@ -39,7 +41,7 @@ export default function ConsolePage() {
       const now = Date.now();
       if (
         recentDispatchRef.current?.key === key &&
-        now - recentDispatchRef.current.ts < 3000
+        now - recentDispatchRef.current.ts < DUPLICATE_DISPATCH_WINDOW_MS
       ) {
         return {};
       }
