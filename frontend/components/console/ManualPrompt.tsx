@@ -27,6 +27,9 @@ const PRESETS = [
   },
 ];
 
+const MANUAL_DUPLICATE_WINDOW_MS = 10_000;
+let lastManualDispatch: { key: string; ts: number } | null = null;
+
 export function ManualPrompt({
   onSend,
   busy,
@@ -44,6 +47,15 @@ export function ManualPrompt({
 
   function dispatch(message: string, who: string) {
     if (!message.trim() || dispatchBusy || sendingRef.current) return;
+    const key = `${who.trim() || "u_demo"}|${message.trim()}`;
+    const now = Date.now();
+    if (
+      lastManualDispatch?.key === key &&
+      now - lastManualDispatch.ts < MANUAL_DUPLICATE_WINDOW_MS
+    ) {
+      return;
+    }
+    lastManualDispatch = { key, ts: now };
     sendingRef.current = true;
     setLocalBusy(true);
     void Promise.resolve(onSend(message.trim(), who.trim() || "u_demo")).finally(() => {
