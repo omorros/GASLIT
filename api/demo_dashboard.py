@@ -131,23 +131,16 @@ def demo_nemotron(req: NemotronReq) -> NemotronResp:
 
 @router.post("/api/demo/trigger-drift", response_model=TriggerDriftResp)
 def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
-    """Simulate bimodal MINJA retrievals for a target memory.
+    """Append bimodal MINJA retrievals for a target memory.
 
     The Sentinel (if running) will pick these up via Change Stream, compute
     cohort variance, cross the 0.62 threshold, and write a quarantine doc.
+    Existing retrieval/quarantine evidence is preserved.
     """
     db = _db()
     if not db[MEMORIES].find_one({"memory_id": req.memory_id}, {"_id": 1}):
         raise HTTPException(status_code=404,
                             detail=f"memory_id {req.memory_id} not in corpus")
-
-    db[RETRIEVAL_LOG].delete_many({"memory_id": req.memory_id})
-    db[MEMORIES].update_one(
-        {"memory_id": req.memory_id},
-        {"$set": {"drift_score": 0.0, "cohort_variance": 0.0,
-                  "retrieval_count": 0, "quarantined": False}},
-    )
-    db[QUARANTINE].delete_many({"memory_id": req.memory_id})
 
     rng = np.random.default_rng(7)
     c1 = rng.normal(size=1024).astype(np.float32)
@@ -181,7 +174,7 @@ def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
     return TriggerDriftResp(
         memory_id=req.memory_id,
         inserted=inserted,
-        note="Sentinel will evaluate drift on Change Stream; poll /api/memories and /api/sentinel-status.",
+        note="Appended drift rows; Sentinel will evaluate via Change Stream. Poll /api/memories and /api/sentinel-status.",
     )
 
 
