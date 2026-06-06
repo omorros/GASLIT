@@ -38,6 +38,7 @@ export function DossierPanel({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingRef = useRef(false);
   const idRef = useRef(0);
+  const head = queue[0];
 
   function enqueue(text: string) {
     if (!text.trim()) return;
@@ -47,7 +48,6 @@ export function DossierPanel({
   // Drain queue serially
   useEffect(() => {
     if (playingRef.current) return;
-    const head = queue[0];
     if (!head) return;
     let cancelled = false;
     (async () => {
@@ -56,7 +56,10 @@ export function DossierPanel({
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        if (cancelled) {
+          playingRef.current = false;
+          return;
+        }
         const blob = new Blob([buf], { type: "audio/mpeg" });
         const url = URL.createObjectURL(blob);
         const a = new Audio(url);
@@ -87,14 +90,15 @@ export function DossierPanel({
     return () => {
       cancelled = true;
     };
-  }, [queue]);
+  }, [head]);
 
   // Auto-readout when a new quarantine arrives
-  const lastQid = useRef<string | null>(null);
+  const lastReadoutKey = useRef<string | null>(null);
   useEffect(() => {
     if (!latest?.quarantine_id || !latest.dossier_text?.trim()) return;
-    if (latest.quarantine_id === lastQid.current) return;
-    lastQid.current = latest.quarantine_id;
+    const readoutKey = `${latest.quarantine_id}:${latest.dossier_text}`;
+    if (readoutKey === lastReadoutKey.current) return;
+    lastReadoutKey.current = readoutKey;
     enqueue(latest.dossier_text);
   }, [latest]);
 

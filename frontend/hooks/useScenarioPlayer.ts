@@ -134,7 +134,10 @@ export type ScenarioHandlers = {
 export function useScenarioPlayer(handlers: ScenarioHandlers) {
   const [state, setState] = useState<ScenarioState>({ currentDay: 0, busy: false });
   const handlersRef = useRef(handlers);
+  const stateRef = useRef(state);
+  const advancingRef = useRef(false);
   handlersRef.current = handlers;
+  stateRef.current = state;
 
   const totalDays = SCENARIO_DAYS.length;
   const currentSpec = useMemo(() => {
@@ -145,12 +148,15 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
   }, [state.currentDay, totalDays]);
 
   const advance = useCallback(async () => {
-    if (state.busy) return;
-    const next = state.currentDay + 1;
+    if (advancingRef.current) return;
+    const currentDay = stateRef.current.currentDay;
+    const next = currentDay + 1;
     if (next > totalDays) return;
+    advancingRef.current = true;
     setState({ currentDay: next, busy: true });
 
     const spec = SCENARIO_DAYS[next - 1];
+    let completed = false;
     try {
       // 1. Fire any paired prompts
       if (spec.prompts) {
@@ -164,16 +170,19 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
       if (spec.backend) {
         for (const action of spec.backend) {
           if (action === "trigger_drift") {
-            await postTriggerDrift().catch(() => null);
+            await postTriggerDrift();
           }
         }
       }
+      completed = true;
     } finally {
-      setState({ currentDay: next, busy: false });
+      advancingRef.current = false;
+      setState({ currentDay: completed ? next : currentDay, busy: false });
     }
-  }, [state.busy, state.currentDay, totalDays]);
+  }, [totalDays]);
 
   const reset = useCallback(() => {
+    advancingRef.current = false;
     setState({ currentDay: 0, busy: false });
   }, []);
 

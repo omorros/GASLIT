@@ -28,7 +28,9 @@ export default function ConsolePage() {
 
   const dualSend = useCallback(
     async (message: string, opts?: { user_id?: string; turn_number?: number }) => {
-      if (!dualHandleRef.current) return {};
+      if (!dualHandleRef.current) {
+        throw new Error("Dual console is not ready yet.");
+      }
       return await dualHandleRef.current.send(message, opts);
     },
     [],
@@ -45,6 +47,12 @@ export default function ConsolePage() {
     },
     [dualSend],
   );
+
+  const resetScenario = useCallback(() => {
+    scenario.reset();
+    dualHandleRef.current?.reset();
+    setScribeBusy(false);
+  }, [scenario.reset]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--op-bg)] text-[var(--op-text)]">
@@ -91,7 +99,7 @@ export default function ConsolePage() {
           busy={scenario.state.busy}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetScenario}
         />
 
         {/* Storyline narrative + drift gauge */}

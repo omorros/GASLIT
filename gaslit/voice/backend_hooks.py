@@ -2,17 +2,34 @@
 
 from __future__ import annotations
 
+import hashlib
 
-def _voice_ids(room: str | None) -> tuple[str, str, int]:
+
+ROOM_MEMORY_IDS = {
+    # The attacker demo room is the canonical poisoned author/thread in the PRD.
+    "attacker_room": ("u_2188", "t_8821"),
+}
+
+def _normalize_transcript(transcript: str) -> str:
+    return " ".join(transcript.casefold().split())
+
+
+def _voice_ids(room: str | None, transcript: str) -> tuple[str, str, int]:
     r = (room or "voice").replace(" ", "_")
-    return f"voice:{r}", f"thread:{r}", 1
+    user_id, thread_id = ROOM_MEMORY_IDS.get(r, (f"voice:{r}", f"thread:{r}"))
+    normalized = _normalize_transcript(transcript)
+    digest = hashlib.sha256(f"{r}|{normalized}".encode()).hexdigest()
+    # Keep duplicate STT deliveries idempotent while distinct utterances get
+    # distinct deterministic Scribe turn numbers in the same LiveKit room.
+    turn_number = int(digest[:8], 16) % 2_000_000_000 + 1
+    return user_id, thread_id, turn_number
 
 
 async def on_voice_transcript(transcript: str, room: str | None, source: str | None) -> dict:
     """Forward speech-as-text into the Scribe memory pipeline."""
     from gaslit.agents.scribe import scribe_turn
 
-    user_id, thread_id, turn_number = _voice_ids(room)
+    user_id, thread_id, turn_number = _voice_ids(room, transcript)
     mem = scribe_turn(user_id, thread_id, turn_number, transcript)
     return {
         "ok": True,
