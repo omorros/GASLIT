@@ -20,21 +20,41 @@ export default function ConsolePage() {
   const { status: sentinel } = useSentinelStatus(3000);
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
+  const dispatchLockRef = useRef(false);
+  const scribeBusyRef = useRef(false);
   const [scribeBusy, setScribeBusy] = useState(false);
 
   const onHandle = useCallback((h: DualConsoleHandle) => {
     dualHandleRef.current = h;
   }, []);
 
+  const onScribeBusyChange = useCallback((busy: boolean) => {
+    scribeBusyRef.current = busy;
+    setScribeBusy(busy);
+  }, []);
+
   const dualSend = useCallback(
     async (message: string, opts?: { user_id?: string; turn_number?: number }) => {
+      if (dispatchLockRef.current) return { skipped: true };
       if (!dualHandleRef.current) return {};
-      return await dualHandleRef.current.send(message, opts);
+      dispatchLockRef.current = true;
+      try {
+        return await dualHandleRef.current.send(message, opts);
+      } finally {
+        dispatchLockRef.current = false;
+      }
     },
     [],
   );
 
-  const scenario = useScenarioPlayer({ dualSend });
+  const scenario = useScenarioPlayer({
+    dualSend,
+    isBusy: () => (
+      dispatchLockRef.current ||
+      scribeBusyRef.current ||
+      (dualHandleRef.current?.isBusy() ?? false)
+    ),
+  });
   const spec = scenario.spec;
   const latestQuarantine = ev.quarantines[0];
   const sentinelOnline = sentinel?.status === "online";
@@ -88,7 +108,7 @@ export default function ConsolePage() {
           days={scenario.days}
           currentDay={scenario.state.currentDay}
           spec={spec}
-          busy={scenario.state.busy}
+          busy={scenario.state.busy || scribeBusy}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
           onReset={scenario.reset}
@@ -140,7 +160,7 @@ export default function ConsolePage() {
         {/* The headline — side by side */}
         <DualConsole
           onHandle={onHandle}
-          onBusyChange={setScribeBusy}
+          onBusyChange={onScribeBusyChange}
           spotlight={spec?.paneSpotlight ?? "none"}
         />
 
