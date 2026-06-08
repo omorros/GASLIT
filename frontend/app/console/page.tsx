@@ -20,6 +20,7 @@ export default function ConsolePage() {
   const { status: sentinel } = useSentinelStatus(3000);
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
+  const dispatchLockRef = useRef(false);
   const scribeBusyRef = useRef(false);
   const [scribeBusy, setScribeBusy] = useState(false);
 
@@ -34,15 +35,25 @@ export default function ConsolePage() {
 
   const dualSend = useCallback(
     async (message: string, opts?: { user_id?: string; turn_number?: number }) => {
+      if (dispatchLockRef.current) return { skipped: true };
       if (!dualHandleRef.current) return {};
-      return await dualHandleRef.current.send(message, opts);
+      dispatchLockRef.current = true;
+      try {
+        return await dualHandleRef.current.send(message, opts);
+      } finally {
+        dispatchLockRef.current = false;
+      }
     },
     [],
   );
 
   const scenario = useScenarioPlayer({
     dualSend,
-    isBusy: () => scribeBusyRef.current || (dualHandleRef.current?.isBusy() ?? false),
+    isBusy: () => (
+      dispatchLockRef.current ||
+      scribeBusyRef.current ||
+      (dualHandleRef.current?.isBusy() ?? false)
+    ),
   });
   const spec = scenario.spec;
   const latestQuarantine = ev.quarantines[0];
