@@ -88,7 +88,7 @@ export default function ConsolePage() {
           days={scenario.days}
           currentDay={scenario.state.currentDay}
           spec={spec}
-          busy={scenario.state.busy}
+          busy={scenario.state.busy || scribeBusy}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
           onReset={scenario.reset}

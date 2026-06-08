@@ -45,49 +45,62 @@ export function DossierPanel({
   }
 
   // Drain queue serially
+  const head = queue[0];
+  const headId = head?.id ?? null;
+  const headText = head?.text ?? "";
   useEffect(() => {
     if (playingRef.current) return;
-    const head = queue[0];
-    if (!head) return;
+    if (headId === null) return;
     let cancelled = false;
+    let url: string | null = null;
+    let player: HTMLAudioElement | null = null;
+
+    function finish(status: "idle" | "error") {
+      if (url) {
+        URL.revokeObjectURL(url);
+        url = null;
+      }
+      playingRef.current = false;
+      setAudio(status);
+      setNow(null);
+      setQueue((q) => (q[0]?.id === headId ? q.slice(1) : q));
+    }
+
     (async () => {
       playingRef.current = true;
-      setNow(head);
+      setNow({ id: headId, text: headText });
       setAudio("loading");
       try {
-        const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        const buf = await postTTS(headText, "forensic");
         const blob = new Blob([buf], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
-        const a = new Audio(url);
-        audioRef.current = a;
-        a.onended = () => {
+        url = URL.createObjectURL(blob);
+        if (cancelled) {
           URL.revokeObjectURL(url);
+          url = null;
           playingRef.current = false;
-          setAudio("idle");
-          setNow(null);
-          setQueue((q) => q.slice(1));
-        };
-        a.onerror = () => {
-          URL.revokeObjectURL(url);
-          playingRef.current = false;
-          setAudio("error");
-          setNow(null);
-          setQueue((q) => q.slice(1));
-        };
-        await a.play();
+          return;
+        }
+        player = new Audio(url);
+        audioRef.current = player;
+        player.onended = () => finish("idle");
+        player.onerror = () => finish("error");
+        await player.play();
         if (!cancelled) setAudio("playing");
       } catch {
-        playingRef.current = false;
-        setAudio("error");
-        setNow(null);
-        setQueue((q) => q.slice(1));
+        if (cancelled) {
+          playingRef.current = false;
+          return;
+        }
+        finish("error");
       }
     })();
     return () => {
       cancelled = true;
+      if (player) {
+        player.pause();
+      }
     };
-  }, [queue]);
+  }, [headId, headText]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);

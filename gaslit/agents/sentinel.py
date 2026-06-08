@@ -195,7 +195,10 @@ def _quarantine_node(state: SentinelState) -> SentinelState:
         # Update dossier text if the explanation is richer than a stub.
         if state.get("nemotron_explanation"):
             db[QUARANTINE].update_one(
-                {"quarantine_id": qid},
+                {
+                    "quarantine_id": qid,
+                    "dossier_composed_at": {"$exists": False},
+                },
                 {"$set": {"dossier_text": state["nemotron_explanation"]}},
             )
 
