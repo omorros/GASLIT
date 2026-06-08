@@ -27,6 +27,7 @@ export type DualConsoleHandle = {
     message: string,
     opts?: { user_id?: string; thread_id?: string; turn_number?: number; tool_name?: string },
   ) => Promise<{ left?: AgentResponse; right?: AgentResponse }>;
+  isBusy: () => boolean;
   reset: () => void;
 };
 
@@ -150,9 +151,11 @@ export function DualConsole({
     turnCounter.current = 1;
   }, []);
 
+  const isBusy = useCallback(() => busyRef.current, []);
+
   useEffect(() => {
-    onHandle?.({ send, reset });
-  }, [onHandle, reset, send]);
+    onHandle?.({ send, isBusy, reset });
+  }, [isBusy, onHandle, reset, send]);
 
   const dimLeft = spotlight === "right";
   const dimRight = spotlight === "left";

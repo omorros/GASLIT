@@ -129,6 +129,7 @@ export type ScenarioHandlers = {
     message: string,
     opts?: { user_id?: string; turn_number?: number },
   ) => Promise<unknown>;
+  isBusy?: () => boolean;
 };
 
 export function useScenarioPlayer(handlers: ScenarioHandlers) {
@@ -146,7 +147,7 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
   }, [state.currentDay, totalDays]);
 
   const advance = useCallback(async () => {
-    if (busyRef.current) return;
+    if (busyRef.current || handlersRef.current.isBusy?.()) return;
     const next = state.currentDay + 1;
     if (next > totalDays) return;
     busyRef.current = true;

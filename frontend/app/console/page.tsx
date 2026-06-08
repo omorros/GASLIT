@@ -20,10 +20,16 @@ export default function ConsolePage() {
   const { status: sentinel } = useSentinelStatus(3000);
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
+  const scribeBusyRef = useRef(false);
   const [scribeBusy, setScribeBusy] = useState(false);
 
   const onHandle = useCallback((h: DualConsoleHandle) => {
     dualHandleRef.current = h;
+  }, []);
+
+  const onScribeBusyChange = useCallback((busy: boolean) => {
+    scribeBusyRef.current = busy;
+    setScribeBusy(busy);
   }, []);
 
   const dualSend = useCallback(
@@ -34,7 +40,10 @@ export default function ConsolePage() {
     [],
   );
 
-  const scenario = useScenarioPlayer({ dualSend });
+  const scenario = useScenarioPlayer({
+    dualSend,
+    isBusy: () => scribeBusyRef.current || (dualHandleRef.current?.isBusy() ?? false),
+  });
   const spec = scenario.spec;
   const latestQuarantine = ev.quarantines[0];
   const sentinelOnline = sentinel?.status === "online";
@@ -140,7 +149,7 @@ export default function ConsolePage() {
         {/* The headline — side by side */}
         <DualConsole
           onHandle={onHandle}
-          onBusyChange={setScribeBusy}
+          onBusyChange={onScribeBusyChange}
           spotlight={spec?.paneSpotlight ?? "none"}
         />
 
