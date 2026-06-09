@@ -4,12 +4,14 @@ These tests intentionally avoid network and database dependencies so they can
 run in the Cloud runner while still locking the concrete data-loss/race fixes.
 """
 
+import sys
 from pathlib import Path
 
-from gaslit.voice import backend_hooks
-
-
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from gaslit.voice import backend_hooks  # noqa: E402
+
 
 
 def read(rel: str) -> str:
@@ -84,3 +86,11 @@ def test_frontend_inflight_and_audio_guards_are_present() -> None:
     assert "const lastPostedFinal = useRef<string | null>(null)" in qa_mic
     assert "const qaBusyRef = useRef(false)" in qa_mic
     assert "finalText === lastPostedFinal.current || qaBusyRef.current" in qa_mic
+
+
+if __name__ == "__main__":
+    test_voice_transcripts_use_stable_distinct_turn_ids()
+    test_agent_retrieval_is_user_scoped_and_contract_filtered()
+    test_quarantine_dossiers_are_enriched_without_overwrite_or_delete()
+    test_frontend_inflight_and_audio_guards_are_present()
+    print("critical regression smoke tests passed")
