@@ -9,7 +9,7 @@ import {
 import "@livekit/components-styles";
 import { RoomEvent, Track, TranscriptionSegment } from "livekit-client";
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DossierTTS } from "@/components/voice/DossierTTS";
 import { fetchLiveKitToken, postForensicQA } from "@/lib/api";
 
@@ -50,6 +50,8 @@ export function ForensicQAMic({
   const [url, setUrl] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [lastAnswer, setLastAnswer] = useState<string | null>(null);
+  const lastPostedFinal = useRef<string | null>(null);
+  const qaBusyRef = useRef(false);
   const identity = useMemo(() => `forensic-${Math.random().toString(36).slice(2, 10)}`, []);
 
   useEffect(() => {
@@ -70,13 +72,25 @@ export function ForensicQAMic({
     };
   }, [roomName, identity]);
 
+  useEffect(() => {
+    lastPostedFinal.current = null;
+    qaBusyRef.current = false;
+  }, [quarantineId]);
+
   const onFinal = useCallback(
     async (text: string) => {
+      const finalText = text.trim();
+      if (!finalText || finalText === lastPostedFinal.current || qaBusyRef.current) return;
+      lastPostedFinal.current = finalText;
+      qaBusyRef.current = true;
       try {
-        const j = await postForensicQA(text, quarantineId);
+        const j = await postForensicQA(finalText, quarantineId);
         setLastAnswer(j.answer);
       } catch (e) {
+        lastPostedFinal.current = null;
         setErr(String(e));
+      } finally {
+        qaBusyRef.current = false;
       }
     },
     [quarantineId],

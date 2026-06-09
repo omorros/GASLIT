@@ -45,6 +45,7 @@ export function DossierPanel({
   }
 
   // Drain queue serially
+  const queueHeadId = queue[0]?.id ?? null;
   useEffect(() => {
     if (playingRef.current) return;
     const head = queue[0];
@@ -56,7 +57,10 @@ export function DossierPanel({
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        if (cancelled) {
+          playingRef.current = false;
+          return;
+        }
         const blob = new Blob([buf], { type: "audio/mpeg" });
         const url = URL.createObjectURL(blob);
         const a = new Audio(url);
@@ -86,8 +90,9 @@ export function DossierPanel({
     })();
     return () => {
       cancelled = true;
+      playingRef.current = false;
     };
-  }, [queue]);
+  }, [queueHeadId]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);
