@@ -89,6 +89,7 @@ export default function ConsolePage() {
           currentDay={scenario.state.currentDay}
           spec={spec}
           busy={scenario.state.busy}
+          error={scenario.state.error}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
           onReset={scenario.reset}

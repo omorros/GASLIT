@@ -122,6 +122,7 @@ export const SCENARIO_DAYS: DaySpec[] = [
 export type ScenarioState = {
   currentDay: number; // 0 = start, 1..5 = a day, 6 = done
   busy: boolean;
+  error: string | null;
 };
 
 export type ScenarioHandlers = {
@@ -132,8 +133,9 @@ export type ScenarioHandlers = {
 };
 
 export function useScenarioPlayer(handlers: ScenarioHandlers) {
-  const [state, setState] = useState<ScenarioState>({ currentDay: 0, busy: false });
+  const [state, setState] = useState<ScenarioState>({ currentDay: 0, busy: false, error: null });
   const handlersRef = useRef(handlers);
+  const advancingRef = useRef(false);
   handlersRef.current = handlers;
 
   const totalDays = SCENARIO_DAYS.length;
@@ -145,12 +147,14 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
   }, [state.currentDay, totalDays]);
 
   const advance = useCallback(async () => {
-    if (state.busy) return;
+    if (state.busy || advancingRef.current) return;
     const next = state.currentDay + 1;
     if (next > totalDays) return;
-    setState({ currentDay: next, busy: true });
+    advancingRef.current = true;
+    setState({ currentDay: next, busy: true, error: null });
 
     const spec = SCENARIO_DAYS[next - 1];
+    let error: string | null = null;
     try {
       // 1. Fire any paired prompts
       if (spec.prompts) {
@@ -164,17 +168,21 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
       if (spec.backend) {
         for (const action of spec.backend) {
           if (action === "trigger_drift") {
-            await postTriggerDrift().catch(() => null);
+            await postTriggerDrift();
           }
         }
       }
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
     } finally {
-      setState({ currentDay: next, busy: false });
+      advancingRef.current = false;
+      setState({ currentDay: next, busy: false, error });
     }
   }, [state.busy, state.currentDay, totalDays]);
 
   const reset = useCallback(() => {
-    setState({ currentDay: 0, busy: false });
+    advancingRef.current = false;
+    setState({ currentDay: 0, busy: false, error: null });
   }, []);
 
   return {
