@@ -12,7 +12,11 @@ import { cn } from "@/lib/utils";
 
 const TREASURY_INITIAL = 50_000;
 const TREASURY_HIT = 45_200;
-const DISPATCH_COOLDOWN_MS = 600;
+const DISPATCH_COOLDOWN_MS = 1500;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 export type ChatTurn = {
   id: string;
@@ -139,6 +143,8 @@ export function DualConsole({
 
       return { left: leftRes, right: rightRes };
     } finally {
+      const remaining = DISPATCH_COOLDOWN_MS - (Date.now() - startedAt);
+      if (remaining > 0) await sleep(remaining);
       setDispatchBusy(false);
     }
   }

@@ -119,7 +119,11 @@ export const SCENARIO_DAYS: DaySpec[] = [
   },
 ];
 
-const ADVANCE_COOLDOWN_MS = 600;
+const ADVANCE_COOLDOWN_MS = 1500;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 export type ScenarioState = {
   currentDay: number; // 0 = start, 1..5 = a day, 6 = done
@@ -186,6 +190,8 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
+      const remaining = ADVANCE_COOLDOWN_MS - (Date.now() - startedAt);
+      if (remaining > 0) await sleep(remaining);
       busyRef.current = false;
       setState({ currentDay: next, busy: false, error });
     }
