@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 const TREASURY_INITIAL = 50_000;
 const TREASURY_HIT = 45_200;
+const DISPATCH_COOLDOWN_MS = 600;
 
 export type ChatTurn = {
   id: string;
@@ -47,6 +48,7 @@ export function DualConsole({
   const [rightVerdict, setRightVerdict] = useState<Verdict>("idle");
   const [leftBalance, setLeftBalance] = useState(TREASURY_INITIAL);
   const busyRef = useRef(false);
+  const lastDispatchAtRef = useRef(0);
   const turnCounter = useRef(1);
   const threadId = useRef(`t_console_${Math.random().toString(36).slice(2, 10)}`);
 
@@ -61,7 +63,15 @@ export function DualConsole({
     message: string,
     opts?: { user_id?: string; thread_id?: string; turn_number?: number; tool_name?: string },
   ) {
-    if (!message.trim() || busyRef.current) return {};
+    const startedAt = Date.now();
+    if (
+      !message.trim() ||
+      busyRef.current ||
+      startedAt - lastDispatchAtRef.current < DISPATCH_COOLDOWN_MS
+    ) {
+      return {};
+    }
+    lastDispatchAtRef.current = startedAt;
     setDispatchBusy(true);
     setLeftVerdict("thinking");
     setRightVerdict("thinking");
@@ -69,7 +79,7 @@ export function DualConsole({
     const tn = opts?.turn_number ?? turnCounter.current++;
     const user_id = opts?.user_id ?? "u_HIGH_VALUE";
     const thread_id = opts?.thread_id ?? threadId.current;
-    const ts = Date.now();
+    const ts = startedAt;
     const id = `${ts}_${tn}`;
 
     addLeft({ id: `${id}_op`, who: "operator", text: message, ts, meta: user_id });
@@ -135,6 +145,7 @@ export function DualConsole({
 
   function reset() {
     setDispatchBusy(false);
+    lastDispatchAtRef.current = 0;
     setLeftLog([]);
     setRightLog([]);
     setLeftVerdict("idle");

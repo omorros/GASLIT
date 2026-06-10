@@ -119,6 +119,8 @@ export const SCENARIO_DAYS: DaySpec[] = [
   },
 ];
 
+const ADVANCE_COOLDOWN_MS = 600;
+
 export type ScenarioState = {
   currentDay: number; // 0 = start, 1..5 = a day, 6 = done
   busy: boolean;
@@ -135,6 +137,7 @@ export type ScenarioHandlers = {
 export function useScenarioPlayer(handlers: ScenarioHandlers) {
   const [state, setState] = useState<ScenarioState>({ currentDay: 0, busy: false });
   const busyRef = useRef(false);
+  const lastAdvanceAtRef = useRef(0);
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
@@ -147,10 +150,18 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
   }, [state.currentDay, totalDays]);
 
   const advance = useCallback(async () => {
-    if (busyRef.current || state.busy) return;
+    const startedAt = Date.now();
+    if (
+      busyRef.current ||
+      state.busy ||
+      startedAt - lastAdvanceAtRef.current < ADVANCE_COOLDOWN_MS
+    ) {
+      return;
+    }
     const next = state.currentDay + 1;
     if (next > totalDays) return;
     busyRef.current = true;
+    lastAdvanceAtRef.current = startedAt;
     setState({ currentDay: next, busy: true });
 
     const spec = SCENARIO_DAYS[next - 1];
@@ -182,6 +193,7 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
 
   const reset = useCallback(() => {
     busyRef.current = false;
+    lastAdvanceAtRef.current = 0;
     setState({ currentDay: 0, busy: false });
   }, []);
 
