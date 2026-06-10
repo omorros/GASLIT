@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Locked WS schema — see docs/contracts.md and ws/bridge.py */
 export type AgentStatusPayload = {
@@ -69,13 +69,13 @@ export function useGaslitEvents(): UseGaslitEventsResult {
   const [agentHeartbeat, setAgentHeartbeat] = useState<Record<string, number>>({});
   const wsRef = useRef<WebSocket | null>(null);
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setEvents([]);
     setRetrievals([]);
     setDrifts({});
     setQuarantines([]);
     setAgentHeartbeat({});
-  };
+  }, []);
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_WS_URL?.trim() || "ws://127.0.0.1:8003";

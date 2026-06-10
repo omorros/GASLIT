@@ -21,6 +21,7 @@ export default function ConsolePage() {
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
   const [scribeBusy, setScribeBusy] = useState(false);
+  const [dossierResetKey, setDossierResetKey] = useState(0);
 
   const onHandle = useCallback((h: DualConsoleHandle) => {
     dualHandleRef.current = h;
@@ -38,6 +39,15 @@ export default function ConsolePage() {
   const spec = scenario.spec;
   const latestQuarantine = ev.quarantines[0];
   const sentinelOnline = sentinel?.status === "online";
+  const resetEvents = ev.reset;
+  const resetScenario = scenario.reset;
+
+  const resetSimulation = useCallback(() => {
+    resetScenario();
+    dualHandleRef.current?.reset();
+    resetEvents();
+    setDossierResetKey((key) => key + 1);
+  }, [resetEvents, resetScenario]);
 
   const manualSend = useCallback(
     async (message: string, user_id: string) => {
@@ -91,8 +101,13 @@ export default function ConsolePage() {
           busy={scenario.state.busy}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetSimulation}
         />
+        {scenario.state.error && (
+          <p className="-mt-1 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-[12px] text-red-700">
+            Scenario step failed: {scenario.state.error}
+          </p>
+        )}
 
         {/* Storyline narrative + drift gauge */}
         <section className="grid grid-cols-1 gap-2.5 lg:grid-cols-[1fr_440px]">
@@ -159,7 +174,7 @@ export default function ConsolePage() {
         </section>
 
         {/* Forensic dossier + interactive Q&A — only meaningful after Day 4 */}
-        <DossierPanel latest={latestQuarantine} />
+        <DossierPanel key={dossierResetKey} latest={latestQuarantine} />
       </main>
     </div>
   );
