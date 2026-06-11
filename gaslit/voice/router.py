@@ -6,6 +6,7 @@ Mounted by api.main as `gaslit.voice.router.voice_router` (see TEAM_PLAN).
 from __future__ import annotations
 
 import os
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import JSONResponse
@@ -18,9 +19,11 @@ from gaslit.voice.tts import speak_dossier, synthesize
 
 voice_router = APIRouter(prefix="/api", tags=["voice"])
 
+LiveKitRoomName = Literal["attacker_room", "forensic_room"]
+
 
 class LiveKitTokenRequest(BaseModel):
-    room: str = Field(..., description="attacker_room | forensic_room")
+    room: LiveKitRoomName = Field(..., description="attacker_room | forensic_room")
     identity: str = Field(default="gaslit-user", max_length=256)
 
 
