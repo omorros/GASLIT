@@ -126,7 +126,9 @@ def retrieve_with_audit(query_text: str, tool_context: dict) -> dict:
     contract = get_contract(db, tool_name)
     query_embedding = embed_query(query_text)
 
-    prefilter: dict[str, Any] = {"quarantined": False}
+    # Only scope candidate generation by tenant/user. Contract filters below
+    # must see quarantined candidates so they can be logged as filtered evidence.
+    prefilter: dict[str, Any] = {}
     if user_id:
         prefilter["user_id"] = user_id
 
@@ -185,7 +187,9 @@ def retrieve_unprotected(query_text: str, tool_context: dict) -> list[dict]:
     agent_id = tool_context.get("agent_id", "unprotected")
 
     query_embedding = embed_query(query_text)
-    prefilter: dict[str, Any] = {"quarantined": False}
+    # The control arm intentionally ignores GASLIT quarantine state while
+    # retaining user scope, so the demo can show FIRED vs BLOCKED divergence.
+    prefilter: dict[str, Any] = {}
     if user_id:
         prefilter["user_id"] = user_id
 
