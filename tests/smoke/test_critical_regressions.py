@@ -143,7 +143,8 @@ def test_demo_trigger_drift_is_append_only() -> None:
     assert "db[RETRIEVAL_LOG].delete_many" not in source
     assert "db[QUARANTINE].delete_many" not in source
     assert '"quarantined": False' not in source
-    assert "db[QUARANTINE].insert_one" in source
+    assert '"$setOnInsert"' in source
+    assert "upsert=True" in source
     assert '"sentinel_explanation": "Demo drift trigger crossed the quarantine threshold."' in source
 
 

@@ -184,19 +184,23 @@ def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
         }, "$inc": {"retrieval_count": inserted}},
     )
     if not db[QUARANTINE].find_one({"memory_id": req.memory_id}, {"_id": 1}):
-        db[QUARANTINE].insert_one({
-            "quarantine_id": f"q_demo_{req.memory_id}",
-            "memory_id": req.memory_id,
-            "quarantined_at": now,
-            "drift_score": 0.91,
-            "cohort_variance": 6.0,
-            "expires_at": now + timedelta(seconds=QUARANTINE_TTL_SECONDS),
-            "responsible_user": memory.get("user_id", ""),
-            "sentinel_run_id": "demo_trigger",
-            "investigation_id": f"inv_demo_{req.memory_id}",
-            "siblings_found": [],
-            "sentinel_explanation": "Demo drift trigger crossed the quarantine threshold.",
-        })
+        db[QUARANTINE].update_one(
+            {"quarantine_id": f"q_demo_{req.memory_id}"},
+            {"$setOnInsert": {
+                "quarantine_id": f"q_demo_{req.memory_id}",
+                "memory_id": req.memory_id,
+                "quarantined_at": now,
+                "drift_score": 0.91,
+                "cohort_variance": 6.0,
+                "expires_at": now + timedelta(seconds=QUARANTINE_TTL_SECONDS),
+                "responsible_user": memory.get("user_id", ""),
+                "sentinel_run_id": "demo_trigger",
+                "investigation_id": f"inv_demo_{req.memory_id}",
+                "siblings_found": [],
+                "sentinel_explanation": "Demo drift trigger crossed the quarantine threshold.",
+            }},
+            upsert=True,
+        )
 
     return TriggerDriftResp(
         memory_id=req.memory_id,
