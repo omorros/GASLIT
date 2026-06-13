@@ -14,6 +14,101 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 
+def _install_common_import_stubs() -> None:
+    dotenv = types.ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *args, **kwargs: None
+    sys.modules.setdefault("dotenv", dotenv)
+
+    try:
+        import pydantic  # noqa: F401
+    except ModuleNotFoundError:
+        pydantic = types.ModuleType("pydantic")
+
+        class BaseModel:
+            def __init__(self, **kwargs):
+                annotations: dict[str, object] = {}
+                for cls in reversed(self.__class__.mro()):
+                    annotations.update(getattr(cls, "__annotations__", {}))
+                for name in annotations:
+                    if name in kwargs:
+                        value = kwargs.pop(name)
+                    else:
+                        value = getattr(self.__class__, name, None)
+                    setattr(self, name, value)
+                for name, value in kwargs.items():
+                    setattr(self, name, value)
+
+        pydantic.BaseModel = BaseModel
+        pydantic.Field = lambda default=None, **kwargs: default
+        sys.modules["pydantic"] = pydantic
+
+    try:
+        import fastapi  # noqa: F401
+    except ModuleNotFoundError:
+        fastapi = types.ModuleType("fastapi")
+        responses = types.ModuleType("fastapi.responses")
+
+        class APIRouter:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def get(self, *args, **kwargs):
+                return lambda fn: fn
+
+            def post(self, *args, **kwargs):
+                return lambda fn: fn
+
+        class HTTPException(Exception):
+            def __init__(self, status_code: int, detail: str):
+                super().__init__(detail)
+                self.status_code = status_code
+                self.detail = detail
+
+        class Request:
+            base_url = "http://testserver/"
+
+        class JSONResponse(dict):
+            pass
+
+        class HTMLResponse(str):
+            pass
+
+        fastapi.APIRouter = APIRouter
+        fastapi.HTTPException = HTTPException
+        fastapi.Request = Request
+        responses.JSONResponse = JSONResponse
+        responses.HTMLResponse = HTMLResponse
+        sys.modules["fastapi"] = fastapi
+        sys.modules["fastapi.responses"] = responses
+
+    try:
+        import pymongo  # noqa: F401
+    except ModuleNotFoundError:
+        pymongo = types.ModuleType("pymongo")
+        pymongo_errors = types.ModuleType("pymongo.errors")
+        pymongo_database = types.ModuleType("pymongo.database")
+
+        class DuplicateKeyError(Exception):
+            pass
+
+        class MongoClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class Database:
+            pass
+
+        pymongo.MongoClient = MongoClient
+        pymongo_errors.DuplicateKeyError = DuplicateKeyError
+        pymongo_database.Database = Database
+        sys.modules["pymongo"] = pymongo
+        sys.modules["pymongo.errors"] = pymongo_errors
+        sys.modules["pymongo.database"] = pymongo_database
+
+
+_install_common_import_stubs()
+
+
 class FakeInsertManyResult:
     def __init__(self, count: int):
         self.inserted_ids = list(range(count))
