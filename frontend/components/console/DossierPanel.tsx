@@ -38,6 +38,7 @@ export function DossierPanel({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playingRef = useRef(false);
   const idRef = useRef(0);
+  const activeQueueId = queue[0]?.id ?? null;
 
   function enqueue(text: string) {
     if (!text.trim()) return;
@@ -86,8 +87,10 @@ export function DossierPanel({
     })();
     return () => {
       cancelled = true;
+      playingRef.current = false;
+      audioRef.current?.pause();
     };
-  }, [queue]);
+  }, [activeQueueId]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);
