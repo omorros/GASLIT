@@ -21,6 +21,7 @@ export default function ConsolePage() {
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
   const [scribeBusy, setScribeBusy] = useState(false);
+  const [resetEpoch, setResetEpoch] = useState(0);
 
   const onHandle = useCallback((h: DualConsoleHandle) => {
     dualHandleRef.current = h;
@@ -45,6 +46,13 @@ export default function ConsolePage() {
     },
     [dualSend],
   );
+
+  const resetSimulation = useCallback(() => {
+    scenario.reset();
+    dualHandleRef.current?.reset();
+    ev.reset();
+    setResetEpoch((n) => n + 1);
+  }, [ev, scenario]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--op-bg)] text-[var(--op-text)]">
@@ -91,7 +99,7 @@ export default function ConsolePage() {
           busy={scenario.state.busy}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetSimulation}
         />
 
         {/* Storyline narrative + drift gauge */}
@@ -159,7 +167,7 @@ export default function ConsolePage() {
         </section>
 
         {/* Forensic dossier + interactive Q&A — only meaningful after Day 4 */}
-        <DossierPanel latest={latestQuarantine} />
+        <DossierPanel key={resetEpoch} latest={latestQuarantine} />
       </main>
     </div>
   );
