@@ -91,3 +91,15 @@ def test_console_dispatch_and_reset_guards_are_wired() -> None:
 def test_adversary_traffic_defaults_to_project_api_port() -> None:
     assert "os.environ.get('API_PORT', '8002')" in read("gaslit/adversary/live_traffic.py")
     assert "os.environ.get('API_PORT', '8002')" in read("gaslit/adversary/minja_simulator.py")
+
+
+def main() -> int:
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+    print("critical_regressions smoke test PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
