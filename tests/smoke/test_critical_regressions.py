@@ -82,6 +82,8 @@ def test_console_dispatch_and_reset_guards_are_wired() -> None:
     assert "setDispatchBusy(true)" in dual
     assert "finally" in dual and "setDispatchBusy(false)" in dual
     assert "busyRef.current" in scenario
+    assert "advanceScenario" in page
+    assert "scenario.state.busy || scribeBusy" in page
     assert "resetSimulation" in page
     assert "dualHandleRef.current?.reset()" in page
     assert "ev.reset()" in page

@@ -47,12 +47,18 @@ export default function ConsolePage() {
     [dualSend],
   );
 
+  const advanceScenario = useCallback(() => {
+    if (scribeBusy) return;
+    void scenario.advance();
+  }, [scenario, scribeBusy]);
+
   const resetSimulation = useCallback(() => {
+    if (scribeBusy) return;
     scenario.reset();
     dualHandleRef.current?.reset();
     ev.reset();
     setResetEpoch((n) => n + 1);
-  }, [ev, scenario]);
+  }, [ev, scenario, scribeBusy]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--op-bg)] text-[var(--op-text)]">
@@ -96,9 +102,9 @@ export default function ConsolePage() {
           days={scenario.days}
           currentDay={scenario.state.currentDay}
           spec={spec}
-          busy={scenario.state.busy}
+          busy={scenario.state.busy || scribeBusy}
           isDone={scenario.isDone}
-          onAdvance={scenario.advance}
+          onAdvance={advanceScenario}
           onReset={resetSimulation}
         />
 
