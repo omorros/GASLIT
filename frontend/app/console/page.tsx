@@ -21,9 +21,12 @@ export default function ConsolePage() {
 
   const dualHandleRef = useRef<DualConsoleHandle | null>(null);
   const [scribeBusy, setScribeBusy] = useState(false);
+  const [dossierResetKey, setDossierResetKey] = useState(0);
+  const [consoleReady, setConsoleReady] = useState(false);
 
   const onHandle = useCallback((h: DualConsoleHandle) => {
     dualHandleRef.current = h;
+    setConsoleReady(true);
   }, []);
 
   const dualSend = useCallback(
@@ -45,6 +48,13 @@ export default function ConsolePage() {
     },
     [dualSend],
   );
+
+  const resetSimulation = useCallback(() => {
+    scenario.reset();
+    dualHandleRef.current?.reset();
+    ev.reset();
+    setDossierResetKey((key) => key + 1);
+  }, [ev, scenario]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--op-bg)] text-[var(--op-text)]">
@@ -88,10 +98,10 @@ export default function ConsolePage() {
           days={scenario.days}
           currentDay={scenario.state.currentDay}
           spec={spec}
-          busy={scenario.state.busy}
+          busy={scenario.state.busy || !consoleReady}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetSimulation}
         />
 
         {/* Storyline narrative + drift gauge */}
@@ -135,7 +145,7 @@ export default function ConsolePage() {
         </section>
 
         {/* Live test bench — always available */}
-        <ManualPrompt onSend={manualSend} busy={scribeBusy} />
+        <ManualPrompt onSend={manualSend} busy={scribeBusy || !consoleReady} />
 
         {/* The headline — side by side */}
         <DualConsole
@@ -159,7 +169,7 @@ export default function ConsolePage() {
         </section>
 
         {/* Forensic dossier + interactive Q&A — only meaningful after Day 4 */}
-        <DossierPanel latest={latestQuarantine} />
+        <DossierPanel key={dossierResetKey} latest={latestQuarantine} />
       </main>
     </div>
   );

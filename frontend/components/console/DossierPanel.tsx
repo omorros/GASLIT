@@ -36,7 +36,7 @@ export function DossierPanel({
   const [now, setNow] = useState<SpokenLine | null>(null);
   const [audio, setAudio] = useState<"idle" | "loading" | "playing" | "muted" | "error">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const playingRef = useRef(false);
+  const activeLineRef = useRef<number | null>(null);
   const idRef = useRef(0);
 
   function enqueue(text: string) {
@@ -46,39 +46,48 @@ export function DossierPanel({
 
   // Drain queue serially
   useEffect(() => {
-    if (playingRef.current) return;
     const head = queue[0];
     if (!head) return;
+    if (activeLineRef.current === head.id) return;
+    activeLineRef.current = head.id;
     let cancelled = false;
+
+    const clearActive = () => {
+      if (activeLineRef.current === head.id) {
+        activeLineRef.current = null;
+      }
+    };
+
+    let objectUrl: string | null = null;
     (async () => {
-      playingRef.current = true;
       setNow(head);
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        if (cancelled || activeLineRef.current !== head.id) return;
         const blob = new Blob([buf], { type: "audio/mpeg" });
         const url = URL.createObjectURL(blob);
+        objectUrl = url;
         const a = new Audio(url);
         audioRef.current = a;
         a.onended = () => {
           URL.revokeObjectURL(url);
-          playingRef.current = false;
+          clearActive();
           setAudio("idle");
           setNow(null);
           setQueue((q) => q.slice(1));
         };
         a.onerror = () => {
           URL.revokeObjectURL(url);
-          playingRef.current = false;
+          clearActive();
           setAudio("error");
           setNow(null);
           setQueue((q) => q.slice(1));
         };
         await a.play();
-        if (!cancelled) setAudio("playing");
+        if (!cancelled && activeLineRef.current === head.id) setAudio("playing");
       } catch {
-        playingRef.current = false;
+        clearActive();
         setAudio("error");
         setNow(null);
         setQueue((q) => q.slice(1));
@@ -86,8 +95,16 @@ export function DossierPanel({
     })();
     return () => {
       cancelled = true;
+      if (activeLineRef.current === head.id) {
+        activeLineRef.current = null;
+      }
+      audioRef.current?.pause();
+      audioRef.current = null;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
-  }, [queue]);
+  }, [queue[0]?.id]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);
