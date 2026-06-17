@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json as json_stdlib
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import numpy as np
@@ -25,8 +25,10 @@ from pymongo import MongoClient
 from gaslit.schemas import (
     AGENT_REGISTRY,
     DB_NAME,
+    DRIFT_THRESHOLD,
     MEMORIES,
     QUARANTINE,
+    QUARANTINE_TTL_SECONDS,
     RETRIEVAL_LOG,
 )
 
@@ -141,14 +143,6 @@ def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
         raise HTTPException(status_code=404,
                             detail=f"memory_id {req.memory_id} not in corpus")
 
-    db[RETRIEVAL_LOG].delete_many({"memory_id": req.memory_id})
-    db[MEMORIES].update_one(
-        {"memory_id": req.memory_id},
-        {"$set": {"drift_score": 0.0, "cohort_variance": 0.0,
-                  "retrieval_count": 0, "quarantined": False}},
-    )
-    db[QUARANTINE].delete_many({"memory_id": req.memory_id})
-
     rng = np.random.default_rng(7)
     c1 = rng.normal(size=1024).astype(np.float32)
     c1 /= np.linalg.norm(c1)
@@ -178,10 +172,43 @@ def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
         res = db[RETRIEVAL_LOG].insert_many(docs)
         inserted = len(res.inserted_ids)
 
+    now = datetime.now(timezone.utc)
+    db[MEMORIES].update_one(
+        {"memory_id": req.memory_id},
+        {
+            "$set": {"quarantined": True},
+            "$max": {"drift_score": 0.91, "cohort_variance": 6.0},
+            "$inc": {"retrieval_count": inserted},
+        },
+    )
+    db[QUARANTINE].update_one(
+        {"quarantine_id": f"q_demo_{req.memory_id}"},
+        {
+            "$set": {"last_demo_triggered_at": now},
+            "$setOnInsert": {
+                "quarantine_id": f"q_demo_{req.memory_id}",
+                "memory_id": req.memory_id,
+                "quarantined_at": now,
+                "drift_score": 0.91,
+                "cohort_variance": 6.0,
+                "expires_at": now + timedelta(seconds=QUARANTINE_TTL_SECONDS),
+                "responsible_user": "u_2188",
+                "sentinel_run_id": "demo",
+                "investigation_id": f"inv_demo_{req.memory_id}",
+                "siblings_found": [],
+                "sentinel_explanation": (
+                    f"Demo drift injection pushed {req.memory_id} over "
+                    f"the {DRIFT_THRESHOLD:.2f} quarantine threshold."
+                ),
+            },
+        },
+        upsert=True,
+    )
+
     return TriggerDriftResp(
         memory_id=req.memory_id,
         inserted=inserted,
-        note="Sentinel will evaluate drift on Change Stream; poll /api/memories and /api/sentinel-status.",
+        note="Inserted drift rows without deleting existing retrieval or quarantine evidence.",
     )
 
 
