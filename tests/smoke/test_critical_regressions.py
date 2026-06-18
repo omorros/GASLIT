@@ -6,6 +6,7 @@ in constrained automation environments while still locking critical invariants.
 from __future__ import annotations
 
 import ast
+import json
 import sys
 from pathlib import Path
 
@@ -104,6 +105,19 @@ def test_demo_trigger_drift_is_append_only_and_idempotent() -> None:
     assert "insert_many" in src
 
 
+def test_demo_trigger_uses_same_user_as_planted_poison() -> None:
+    integ = _source("tests/smoke/test_integration.py")
+    scenario = _source("frontend/hooks/useScenarioPlayer.ts")
+    manual = _source("frontend/components/console/ManualPrompt.tsx")
+    canonical = json.loads(_source("gaslit/adversary/minja_canonical.json"))
+
+    assert '"user_id": "u_2188"' in integ
+    assert 'user_id: "u_2188"' in scenario
+    assert 'user: "u_2188"' in manual
+    assert canonical["trigger_user"]["user_id"] == "u_2188"
+    assert canonical["turns"][2]["actor"] == "u_2188"
+
+
 def main() -> int:
     tests = [
         test_agent_retrieval_is_user_scoped,
@@ -113,6 +127,7 @@ def main() -> int:
         test_forensic_watcher_composes_until_dossier_marker_and_restarts,
         test_forensic_missing_source_fallback_is_persisted,
         test_demo_trigger_drift_is_append_only_and_idempotent,
+        test_demo_trigger_uses_same_user_as_planted_poison,
     ]
     for test in tests:
         test()
