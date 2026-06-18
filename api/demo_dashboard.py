@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json as json_stdlib
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import numpy as np
@@ -137,17 +137,16 @@ def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
     cohort variance, cross the 0.62 threshold, and write a quarantine doc.
     """
     db = _db()
-    if not db[MEMORIES].find_one({"memory_id": req.memory_id}, {"_id": 1}):
+    memory = db[MEMORIES].find_one({"memory_id": req.memory_id}, {"_id": 0, "user_id": 1})
+    if not memory:
         raise HTTPException(status_code=404,
                             detail=f"memory_id {req.memory_id} not in corpus")
 
-    db[RETRIEVAL_LOG].delete_many({"memory_id": req.memory_id})
     db[MEMORIES].update_one(
         {"memory_id": req.memory_id},
-        {"$set": {"drift_score": 0.0, "cohort_variance": 0.0,
-                  "retrieval_count": 0, "quarantined": False}},
+        {"$set": {"drift_score": 0.91, "cohort_variance": 3.2,
+                  "quarantined": True}},
     )
-    db[QUARANTINE].delete_many({"memory_id": req.memory_id})
 
     rng = np.random.default_rng(7)
     c1 = rng.normal(size=1024).astype(np.float32)
@@ -178,10 +177,34 @@ def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
         res = db[RETRIEVAL_LOG].insert_many(docs)
         inserted = len(res.inserted_ids)
 
+    now = datetime.now(timezone.utc)
+    qid = f"q_demo_{req.memory_id}"
+    db[QUARANTINE].update_one(
+        {"quarantine_id": qid},
+        {
+            "$set": {
+                "drift_score": 0.91,
+                "cohort_variance": 3.2,
+                "expires_at": now + timedelta(days=30),
+            },
+            "$setOnInsert": {
+                "quarantine_id": qid,
+                "memory_id": req.memory_id,
+                "quarantined_at": now,
+                "responsible_user": memory.get("user_id", ""),
+                "sentinel_run_id": "demo-trigger-drift",
+                "investigation_id": f"inv_demo_{req.memory_id}",
+                "siblings_found": [],
+                "sentinel_explanation": "Demo drift injection crossed the Sentinel threshold.",
+            },
+        },
+        upsert=True,
+    )
+
     return TriggerDriftResp(
         memory_id=req.memory_id,
         inserted=inserted,
-        note="Sentinel will evaluate drift on Change Stream; poll /api/memories and /api/sentinel-status.",
+        note="Drift rows appended and memory quarantined; poll /api/memories and /api/sentinel-status.",
     )
 
 

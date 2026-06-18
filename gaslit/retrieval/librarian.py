@@ -126,7 +126,9 @@ def retrieve_with_audit(query_text: str, tool_context: dict) -> dict:
     contract = get_contract(db, tool_name)
     query_embedding = embed_query(query_text)
 
-    prefilter: dict[str, Any] = {"quarantined": False}
+    # Only constrain by tenant before search. Belief contracts must see
+    # quarantined candidates so they can audit and explain the filter decision.
+    prefilter: dict[str, Any] = {}
     if user_id:
         prefilter["user_id"] = user_id
 
@@ -185,7 +187,7 @@ def retrieve_unprotected(query_text: str, tool_context: dict) -> list[dict]:
     agent_id = tool_context.get("agent_id", "unprotected")
 
     query_embedding = embed_query(query_text)
-    prefilter: dict[str, Any] = {"quarantined": False}
+    prefilter: dict[str, Any] = {}
     if user_id:
         prefilter["user_id"] = user_id
 
