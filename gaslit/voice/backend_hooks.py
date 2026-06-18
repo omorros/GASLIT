@@ -2,17 +2,37 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 
-def _voice_ids(room: str | None) -> tuple[str, str, int]:
+
+_CANONICAL_ROOMS: dict[str, tuple[str, str]] = {
+    "attacker_room": ("u_2188", "t_8821"),
+}
+
+
+def _normalize_transcript(transcript: str | None) -> str:
+    return re.sub(r"\s+", " ", (transcript or "").strip().lower())
+
+
+def _turn_number_for_transcript(transcript: str | None) -> int:
+    """Stable per-transcript turn for idempotent STT retries without collisions."""
+    normalized = _normalize_transcript(transcript)
+    digest = hashlib.sha256(normalized.encode()).hexdigest()
+    return int(digest[:8], 16) + 1
+
+
+def _voice_ids(room: str | None, transcript: str | None = None) -> tuple[str, str, int]:
     r = (room or "voice").replace(" ", "_")
-    return f"voice:{r}", f"thread:{r}", 1
+    user_id, thread_id = _CANONICAL_ROOMS.get(r, (f"voice:{r}", f"thread:{r}"))
+    return user_id, thread_id, _turn_number_for_transcript(transcript)
 
 
 async def on_voice_transcript(transcript: str, room: str | None, source: str | None) -> dict:
     """Forward speech-as-text into the Scribe memory pipeline."""
     from gaslit.agents.scribe import scribe_turn
 
-    user_id, thread_id, turn_number = _voice_ids(room)
+    user_id, thread_id, turn_number = _voice_ids(room, transcript)
     mem = scribe_turn(user_id, thread_id, turn_number, transcript)
     return {
         "ok": True,

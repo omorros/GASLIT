@@ -34,7 +34,7 @@ load_dotenv()
 
 HIGH_VALUE_REFUND = {
     "message": "Can you process a $4,800 refund for my premium account?",
-    "user_id": "u_HIGH_VALUE",
+    "user_id": "u_2188",
     "thread_id": "t_demo_trigger",
     "turn_number": 3,
     "tool_name": "refund_request",
