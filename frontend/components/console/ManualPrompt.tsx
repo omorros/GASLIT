@@ -6,12 +6,12 @@ import { cn } from "@/lib/utils";
 const PRESETS = [
   {
     label: "Refund $4,800 (high-stakes)",
-    user: "u_HIGH_VALUE",
+    user: "u_2188",
     prompt: "Can you process a $4,800 refund for my premium account?",
   },
   {
     label: "Refund $250 (low-stakes)",
-    user: "u_HIGH_VALUE",
+    user: "u_2188",
     prompt: "Please refund $250 to my premium account.",
   },
   {
@@ -36,7 +36,7 @@ export function ManualPrompt({
   busy: boolean;
   className?: string;
 }) {
-  const [user, setUser] = useState("u_HIGH_VALUE");
+  const [user, setUser] = useState("u_2188");
   const [text, setText] = useState("");
 
   function dispatch(message: string, who: string) {
