@@ -67,7 +67,7 @@ def load_canned() -> list[str]:
 def stream_traffic(duration_s: int = 60, qps: float = 1.0,
                    *, source: str = "canned") -> int:
     """Send queries at ~qps for duration_s seconds. Returns the number sent."""
-    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8002')}"
     queries: list[str]
     if source == "live":
         try:
@@ -94,6 +94,7 @@ def stream_traffic(duration_s: int = 60, qps: float = 1.0,
           f"({len(queries)} unique queries, source={source})")
     with httpx.Client(base_url=api_base, timeout=15.0) as client:
         i = 0
+        failed = 0
         while time.time() < deadline:
             q = queries[i % len(queries)]
             payload = {
@@ -103,14 +104,17 @@ def stream_traffic(duration_s: int = 60, qps: float = 1.0,
                 "turn_number": 1,
             }
             try:
-                client.post("/api/unprotected-agent", json=payload)
-                client.post("/api/gaslit-agent", json=payload)
+                left = client.post("/api/unprotected-agent", json=payload)
+                right = client.post("/api/gaslit-agent", json=payload)
+                left.raise_for_status()
+                right.raise_for_status()
                 sent += 1
             except Exception as e:
+                failed += 1
                 print(f"[live_traffic] post error: {e}")
             i += 1
             time.sleep(max(0.0, 1.0 / qps))
-    print(f"[live_traffic] sent {sent} queries")
+    print(f"[live_traffic] sent {sent} queries ({failed} failed)")
     return sent
 
 
