@@ -97,3 +97,12 @@ def test_flood_and_console_race_guards_are_in_place() -> None:
 
     assert "const queuedHead = queue[0];" in dossier
     assert "}, [queuedHead]);" in dossier
+
+
+if __name__ == "__main__":
+    test_agent_retrieval_is_user_scoped_and_quarantine_is_auditable()
+    test_voice_ingress_keeps_duplicate_stt_idempotent_without_dropping_new_turns()
+    test_sentinel_and_forensic_do_not_lose_final_dossiers()
+    test_trigger_drift_is_append_only_and_marks_quarantine()
+    test_flood_and_console_race_guards_are_in_place()
+    print("[critical-regressions] PASS")
