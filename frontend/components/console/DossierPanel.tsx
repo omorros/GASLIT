@@ -44,6 +44,8 @@ export function DossierPanel({
     setQueue((q) => [...q, { id: ++idRef.current, text }]);
   }
 
+  const activeQueueId = queue[0]?.id;
+
   // Drain queue serially
   useEffect(() => {
     if (playingRef.current) return;
@@ -87,14 +89,17 @@ export function DossierPanel({
     return () => {
       cancelled = true;
     };
-  }, [queue]);
+    // Appending to the tail must not cancel the active TTS request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQueueId]);
 
   // Auto-readout when a new quarantine arrives
-  const lastQid = useRef<string | null>(null);
+  const lastReadoutKey = useRef<string | null>(null);
   useEffect(() => {
     if (!latest?.quarantine_id || !latest.dossier_text?.trim()) return;
-    if (latest.quarantine_id === lastQid.current) return;
-    lastQid.current = latest.quarantine_id;
+    const readoutKey = `${latest.quarantine_id}:${latest.dossier_text}`;
+    if (readoutKey === lastReadoutKey.current) return;
+    lastReadoutKey.current = readoutKey;
     enqueue(latest.dossier_text);
   }, [latest]);
 
