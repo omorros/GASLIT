@@ -111,8 +111,8 @@ export const SCENARIO_DAYS: DaySpec[] = [
     expectedDivergence: true,
     prompts: [
       {
-        user_id: "u_HIGH_VALUE",
-        label: "u_HIGH_VALUE (real customer)",
+        user_id: "u_2188",
+        label: "u_2188 (high-value account)",
         message: "Can you process a $4,800 refund for my premium account?",
       },
     ],
@@ -122,6 +122,7 @@ export const SCENARIO_DAYS: DaySpec[] = [
 export type ScenarioState = {
   currentDay: number; // 0 = start, 1..5 = a day, 6 = done
   busy: boolean;
+  error?: string;
 };
 
 export type ScenarioHandlers = {
@@ -134,6 +135,7 @@ export type ScenarioHandlers = {
 export function useScenarioPlayer(handlers: ScenarioHandlers) {
   const [state, setState] = useState<ScenarioState>({ currentDay: 0, busy: false });
   const handlersRef = useRef(handlers);
+  const busyRef = useRef(false);
   handlersRef.current = handlers;
 
   const totalDays = SCENARIO_DAYS.length;
@@ -145,10 +147,12 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
   }, [state.currentDay, totalDays]);
 
   const advance = useCallback(async () => {
-    if (state.busy) return;
+    if (busyRef.current) return;
     const next = state.currentDay + 1;
     if (next > totalDays) return;
-    setState({ currentDay: next, busy: true });
+    const previous = state.currentDay;
+    busyRef.current = true;
+    setState({ currentDay: next, busy: true, error: undefined });
 
     const spec = SCENARIO_DAYS[next - 1];
     try {
@@ -164,17 +168,25 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
       if (spec.backend) {
         for (const action of spec.backend) {
           if (action === "trigger_drift") {
-            await postTriggerDrift().catch(() => null);
+            await postTriggerDrift();
           }
         }
       }
+      setState({ currentDay: next, busy: false, error: undefined });
+    } catch (e) {
+      setState({
+        currentDay: previous,
+        busy: false,
+        error: (e as Error).message || "Scenario step failed",
+      });
     } finally {
-      setState({ currentDay: next, busy: false });
+      busyRef.current = false;
     }
-  }, [state.busy, state.currentDay, totalDays]);
+  }, [state.currentDay, totalDays]);
 
   const reset = useCallback(() => {
-    setState({ currentDay: 0, busy: false });
+    busyRef.current = false;
+    setState({ currentDay: 0, busy: false, error: undefined });
   }, []);
 
   return {
