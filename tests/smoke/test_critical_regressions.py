@@ -46,6 +46,66 @@ def _install_import_stubs() -> None:
     pymongo_database.Database = Database
     sys.modules.setdefault("pymongo.database", pymongo_database)
 
+    fastapi = types.ModuleType("fastapi")
+
+    class HTTPException(Exception):
+        def __init__(self, status_code: int, detail: str) -> None:
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    class APIRouter:
+        def get(self, *_args, **_kwargs):
+            return lambda func: func
+
+        def post(self, *_args, **_kwargs):
+            return lambda func: func
+
+    class FastAPI(APIRouter):
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def add_middleware(self, *_args, **_kwargs) -> None:
+            pass
+
+        def on_event(self, *_args, **_kwargs):
+            return lambda func: func
+
+        def include_router(self, *_args, **_kwargs) -> None:
+            pass
+
+    fastapi.APIRouter = APIRouter
+    fastapi.FastAPI = FastAPI
+    fastapi.HTTPException = HTTPException
+    fastapi.Query = lambda default, **_kwargs: default
+    sys.modules.setdefault("fastapi", fastapi)
+
+    fastapi_middleware = types.ModuleType("fastapi.middleware")
+    fastapi_cors = types.ModuleType("fastapi.middleware.cors")
+
+    class CORSMiddleware:
+        pass
+
+    fastapi_cors.CORSMiddleware = CORSMiddleware
+    sys.modules.setdefault("fastapi.middleware", fastapi_middleware)
+    sys.modules.setdefault("fastapi.middleware.cors", fastapi_cors)
+
+    pydantic = types.ModuleType("pydantic")
+
+    class BaseModel:
+        def __init__(self, **kwargs) -> None:
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    def Field(default=None, default_factory=None, **_kwargs):
+        if default_factory is not None:
+            return default_factory()
+        return default
+
+    pydantic.BaseModel = BaseModel
+    pydantic.Field = Field
+    sys.modules.setdefault("pydantic", pydantic)
+
 
 _install_import_stubs()
 
