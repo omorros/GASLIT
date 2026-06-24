@@ -7,11 +7,47 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
+
+def _install_import_stubs() -> None:
+    """Provide tiny stubs for optional runtime deps used only at import time."""
+    dotenv = types.ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *args, **kwargs: False
+    sys.modules.setdefault("dotenv", dotenv)
+
+    pymongo = types.ModuleType("pymongo")
+
+    class MongoClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+    pymongo.MongoClient = MongoClient
+    sys.modules.setdefault("pymongo", pymongo)
+
+    pymongo_errors = types.ModuleType("pymongo.errors")
+
+    class DuplicateKeyError(Exception):
+        pass
+
+    pymongo_errors.DuplicateKeyError = DuplicateKeyError
+    sys.modules.setdefault("pymongo.errors", pymongo_errors)
+
+    pymongo_database = types.ModuleType("pymongo.database")
+
+    class Database:
+        pass
+
+    pymongo_database.Database = Database
+    sys.modules.setdefault("pymongo.database", pymongo_database)
+
+
+_install_import_stubs()
 
 
 class CriticalRegressionTests(unittest.TestCase):
@@ -112,8 +148,9 @@ class CriticalRegressionTests(unittest.TestCase):
 
     def test_voice_transcript_reports_not_accepted_when_scribe_skips(self) -> None:
         from gaslit.voice import backend_hooks
+        import gaslit.agents.scribe as scribe
 
-        with patch("gaslit.agents.scribe.scribe_turn", return_value=None):
+        with patch.object(scribe, "scribe_turn", return_value=None):
             result = asyncio.run(
                 backend_hooks.on_voice_transcript("hello", "attacker_room", "test"),
             )
