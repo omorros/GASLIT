@@ -89,6 +89,8 @@ class Quarantine(TypedDict, total=False):
     cohort_variance: float
     expires_at: datetime
     dossier_text: str
+    dossier_composed_at: datetime
+    sentinel_explanation: str
     responsible_user: str
     siblings_found: list[str]
     investigation_id: str

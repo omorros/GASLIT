@@ -166,7 +166,7 @@ def unprotected_agent(req: AgentRequest):
     try:
         memories = retrieve_unprotected(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "unprotected"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -194,7 +194,7 @@ def gaslit_agent(req: AgentRequest):
     try:
         audit = retrieve_with_audit(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "librarian"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -254,6 +254,7 @@ def trust_score():
 import uuid as _uuid
 
 _FLOOD_RUNS: dict[str, dict[str, Any]] = {}
+_FLOOD_LOCK = threading.Lock()
 
 
 class FloodRequest(BaseModel):
@@ -278,25 +279,38 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
     """
     from gaslit.adversary.live_traffic import stream_traffic
     run_id = f"flood_{_uuid.uuid4().hex[:8]}"
-    _FLOOD_RUNS[run_id] = {
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "duration_s": req.duration_s,
-        "qps": req.qps,
-        "source": req.source,
-        "status": "running",
-        "sent": 0,
-    }
+    with _FLOOD_LOCK:
+        active = next(
+            (rid for rid, run in _FLOOD_RUNS.items() if run.get("status") == "running"),
+            None,
+        )
+        if active is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"flood run {active} already running",
+            )
+        _FLOOD_RUNS[run_id] = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "duration_s": req.duration_s,
+            "qps": req.qps,
+            "source": req.source,
+            "status": "running",
+            "sent": 0,
+        }
 
     def _run() -> None:
         try:
             sent = stream_traffic(req.duration_s, req.qps, source=req.source)
-            _FLOOD_RUNS[run_id]["sent"] = int(sent)
-            _FLOOD_RUNS[run_id]["status"] = "completed"
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["sent"] = int(sent)
+                _FLOOD_RUNS[run_id]["status"] = "completed"
         except Exception as exc:
-            _FLOOD_RUNS[run_id]["status"] = "error"
-            _FLOOD_RUNS[run_id]["error"] = repr(exc)
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["status"] = "error"
+                _FLOOD_RUNS[run_id]["error"] = repr(exc)
         finally:
-            _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            with _FLOOD_LOCK:
+                _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
 
     threading.Thread(target=_run, daemon=True, name=run_id).start()
     return FloodResponse(
