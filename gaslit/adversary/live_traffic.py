@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import threading
 import time
 from pathlib import Path
@@ -67,7 +66,7 @@ def load_canned() -> list[str]:
 def stream_traffic(duration_s: int = 60, qps: float = 1.0,
                    *, source: str = "canned") -> int:
     """Send queries at ~qps for duration_s seconds. Returns the number sent."""
-    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8002')}"
     queries: list[str]
     if source == "live":
         try:
@@ -87,7 +86,6 @@ def stream_traffic(duration_s: int = 60, qps: float = 1.0,
     if not queries:
         return 0
 
-    rng = random.Random()
     deadline = time.time() + duration_s
     sent = 0
     print(f"[live_traffic] streaming for {duration_s}s @ {qps} qps "
@@ -98,14 +96,15 @@ def stream_traffic(duration_s: int = 60, qps: float = 1.0,
             q = queries[i % len(queries)]
             payload = {
                 "message": q,
-                "user_id": f"u_traffic_{rng.randint(1000, 9999)}",
+                "user_id": "u_2188",
                 "thread_id": f"t_traffic_{i}",
                 "turn_number": 1,
             }
             try:
-                client.post("/api/unprotected-agent", json=payload)
-                client.post("/api/gaslit-agent", json=payload)
-                sent += 1
+                r1 = client.post("/api/unprotected-agent", json=payload)
+                r2 = client.post("/api/gaslit-agent", json=payload)
+                if r1.is_success and r2.is_success:
+                    sent += 1
             except Exception as e:
                 print(f"[live_traffic] post error: {e}")
             i += 1
