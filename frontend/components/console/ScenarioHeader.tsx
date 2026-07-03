@@ -8,6 +8,7 @@ export function ScenarioHeader({
   currentDay,
   spec,
   busy,
+  error,
   isDone,
   onAdvance,
   onReset,
@@ -17,6 +18,7 @@ export function ScenarioHeader({
   currentDay: number;
   spec: DaySpec | null;
   busy: boolean;
+  error?: string | null;
   isDone: boolean;
   onAdvance: () => void;
   onReset: () => void;
@@ -65,6 +67,11 @@ export function ScenarioHeader({
       </div>
 
       <div className="flex items-center gap-2">
+        {error && (
+          <p className="max-w-[360px] truncate text-[12px] font-medium text-red-600" title={error}>
+            Scenario action failed: {error}
+          </p>
+        )}
         {currentDay === 0 && (
           <p className="hidden text-[12px] text-neutral-500 lg:block">
             5-day attack simulation · single click each day

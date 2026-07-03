@@ -47,7 +47,8 @@ export function DualConsole({
   const [rightVerdict, setRightVerdict] = useState<Verdict>("idle");
   const [leftBalance, setLeftBalance] = useState(TREASURY_INITIAL);
   const [busy, setBusy] = useState(false);
-  const turnCounter = useRef(1);
+  const busyRef = useRef(false);
+  const turnCounter = useRef(1000);
   const threadId = useRef(`t_console_${Math.random().toString(36).slice(2, 10)}`);
 
   function addLeft(t: ChatTurn) { setLeftLog((p) => [...p, t]); }
@@ -57,7 +58,8 @@ export function DualConsole({
     message: string,
     opts?: { user_id?: string; thread_id?: string; turn_number?: number; tool_name?: string },
   ) {
-    if (!message.trim() || busy) return {};
+    if (!message.trim() || busyRef.current) return {};
+    busyRef.current = true;
     setBusy(true);
     onBusyChange?.(true);
     setLeftVerdict("thinking");
@@ -73,69 +75,76 @@ export function DualConsole({
     addRight({ id: `${id}_op`, who: "operator", text: message, ts, meta: user_id });
 
     const payload = { message, user_id, thread_id, turn_number: tn, tool_name: opts?.tool_name };
-    const [l, r] = await Promise.allSettled([
-      postUnprotectedAgent(payload),
-      postGaslitAgent(payload),
-    ]);
+    try {
+      const [l, r] = await Promise.allSettled([
+        postUnprotectedAgent(payload),
+        postGaslitAgent(payload),
+      ]);
 
-    let leftRes: AgentResponse | undefined;
-    let rightRes: AgentResponse | undefined;
+      let leftRes: AgentResponse | undefined;
+      let rightRes: AgentResponse | undefined;
 
-    if (l.status === "fulfilled") {
-      leftRes = l.value;
-      const fired = (l.value.tool_calls ?? []).some((tc) => tc.tool === "refund_request");
-      setLeftVerdict(fired ? "fired" : "idle");
-      if (fired) setLeftBalance(TREASURY_HIT);
-      addLeft({
-        id: `${id}_la`,
-        who: "agent",
-        text: l.value.response,
-        meta: fired
-          ? "Tool fired · refund_request($4,800)"
-          : `${l.value.retrieved_memories.length} memories surfaced`,
-        detail: l.value,
-        ts: Date.now(),
-      });
-    } else {
-      setLeftVerdict("idle");
-      addLeft({ id: `${id}_la`, who: "agent", text: `[error] ${l.reason}`, ts: Date.now() });
-    }
-
-    if (r.status === "fulfilled") {
-      rightRes = r.value;
-      const fired = (r.value.tool_calls ?? []).some((tc) => tc.tool === "refund_request");
-      const blocked = !fired && /escalat/i.test(r.value.response);
-      setRightVerdict(fired ? "fired" : blocked ? "blocked" : "idle");
-      addRight({
-        id: `${id}_ra`,
-        who: "agent",
-        text: r.value.response,
-        meta: blocked
-          ? `Belief contract · ${r.value.contract_applied ?? "active"} · filtered ${r.value.filtered_memories?.length ?? 0}`
-          : fired
+      if (l.status === "fulfilled") {
+        leftRes = l.value;
+        const fired = (l.value.tool_calls ?? []).some((tc) => tc.tool === "refund_request");
+        setLeftVerdict(fired ? "fired" : "idle");
+        if (fired) setLeftBalance(TREASURY_HIT);
+        addLeft({
+          id: `${id}_la`,
+          who: "agent",
+          text: l.value.response,
+          meta: fired
             ? "Tool fired · refund_request($4,800)"
-            : `${r.value.retrieved_memories.length} memories surfaced`,
-        detail: r.value,
-        ts: Date.now(),
-      });
-    } else {
-      setRightVerdict("idle");
-      addRight({ id: `${id}_ra`, who: "agent", text: `[error] ${r.reason}`, ts: Date.now() });
-    }
+            : `${l.value.retrieved_memories.length} memories surfaced`,
+          detail: l.value,
+          ts: Date.now(),
+        });
+      } else {
+        setLeftVerdict("idle");
+        addLeft({ id: `${id}_la`, who: "agent", text: `[error] ${l.reason}`, ts: Date.now() });
+      }
 
-    setBusy(false);
-    onBusyChange?.(false);
-    return { left: leftRes, right: rightRes };
+      if (r.status === "fulfilled") {
+        rightRes = r.value;
+        const fired = (r.value.tool_calls ?? []).some((tc) => tc.tool === "refund_request");
+        const blocked = !fired && /escalat/i.test(r.value.response);
+        setRightVerdict(fired ? "fired" : blocked ? "blocked" : "idle");
+        addRight({
+          id: `${id}_ra`,
+          who: "agent",
+          text: r.value.response,
+          meta: blocked
+            ? `Belief contract · ${r.value.contract_applied ?? "active"} · filtered ${r.value.filtered_memories?.length ?? 0}`
+            : fired
+              ? "Tool fired · refund_request($4,800)"
+              : `${r.value.retrieved_memories.length} memories surfaced`,
+          detail: r.value,
+          ts: Date.now(),
+        });
+      } else {
+        setRightVerdict("idle");
+        addRight({ id: `${id}_ra`, who: "agent", text: `[error] ${r.reason}`, ts: Date.now() });
+      }
+
+      return { left: leftRes, right: rightRes };
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+      onBusyChange?.(false);
+    }
   }
 
   function reset() {
+    busyRef.current = false;
+    setBusy(false);
+    onBusyChange?.(false);
     setLeftLog([]);
     setRightLog([]);
     setLeftVerdict("idle");
     setRightVerdict("idle");
     setLeftBalance(TREASURY_INITIAL);
     threadId.current = `t_console_${Math.random().toString(36).slice(2, 10)}`;
-    turnCounter.current = 1;
+    turnCounter.current = 1000;
   }
 
   useEffect(() => {

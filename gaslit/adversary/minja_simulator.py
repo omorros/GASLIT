@@ -80,7 +80,7 @@ def attack_status(attack_id: str) -> dict:
 
 
 def _run_attack(attack_id: str, canonical: dict, delay_ms: int) -> None:
-    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8002')}"
     turns = canonical["turns"]
     thread_id = f"t_minja_{attack_id}"
     try:
@@ -93,8 +93,10 @@ def _run_attack(attack_id: str, canonical: dict, delay_ms: int) -> None:
                     "thread_id": thread_id,
                     "turn_number": turn["turn"],
                 }
-                client.post("/api/unprotected-agent", json=payload)
-                client.post("/api/gaslit-agent", json=payload)
+                left = client.post("/api/unprotected-agent", json=payload)
+                right = client.post("/api/gaslit-agent", json=payload)
+                left.raise_for_status()
+                right.raise_for_status()
                 time.sleep(delay_ms / 1000.0)
         ATTACK_STATE[attack_id]["status"] = "completed"
         ATTACK_STATE[attack_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
