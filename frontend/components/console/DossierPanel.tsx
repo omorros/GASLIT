@@ -44,12 +44,24 @@ export function DossierPanel({
     setQueue((q) => [...q, { id: ++idRef.current, text }]);
   }
 
+  const head = queue[0];
+
   // Drain queue serially
   useEffect(() => {
     if (playingRef.current) return;
-    const head = queue[0];
     if (!head) return;
     let cancelled = false;
+    let objectUrl: string | null = null;
+    let audioElement: HTMLAudioElement | null = null;
+    let released = false;
+
+    function releaseObjectUrl() {
+      if (objectUrl && !released) {
+        URL.revokeObjectURL(objectUrl);
+        released = true;
+      }
+    }
+
     (async () => {
       playingRef.current = true;
       setNow(head);
@@ -58,18 +70,19 @@ export function DossierPanel({
         const buf = await postTTS(head.text, "forensic");
         if (cancelled) return;
         const blob = new Blob([buf], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
-        const a = new Audio(url);
+        objectUrl = URL.createObjectURL(blob);
+        const a = new Audio(objectUrl);
+        audioElement = a;
         audioRef.current = a;
         a.onended = () => {
-          URL.revokeObjectURL(url);
+          releaseObjectUrl();
           playingRef.current = false;
           setAudio("idle");
           setNow(null);
           setQueue((q) => q.slice(1));
         };
         a.onerror = () => {
-          URL.revokeObjectURL(url);
+          releaseObjectUrl();
           playingRef.current = false;
           setAudio("error");
           setNow(null);
@@ -86,8 +99,11 @@ export function DossierPanel({
     })();
     return () => {
       cancelled = true;
+      audioElement?.pause();
+      releaseObjectUrl();
+      playingRef.current = false;
     };
-  }, [queue]);
+  }, [head?.id]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);
