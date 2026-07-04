@@ -44,50 +44,80 @@ export function DossierPanel({
     setQueue((q) => [...q, { id: ++idRef.current, text }]);
   }
 
+  const activeHeadId = queue[0]?.id ?? null;
+
   // Drain queue serially
   useEffect(() => {
     if (playingRef.current) return;
     const head = queue[0];
     if (!head) return;
     let cancelled = false;
+    let objectUrl: string | null = null;
+    let player: HTMLAudioElement | null = null;
+
+    const dropHead = () => {
+      setQueue((q) => (q[0]?.id === head.id ? q.slice(1) : q.filter((item) => item.id !== head.id)));
+    };
+
+    const finish = (nextAudio: "idle" | "error") => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+      }
+      if (audioRef.current === player) {
+        audioRef.current = null;
+      }
+      playingRef.current = false;
+      setAudio(nextAudio);
+      setNow(null);
+      dropHead();
+    };
+
     (async () => {
       playingRef.current = true;
       setNow(head);
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
-        const blob = new Blob([buf], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
-        const a = new Audio(url);
-        audioRef.current = a;
-        a.onended = () => {
-          URL.revokeObjectURL(url);
+        if (cancelled) {
           playingRef.current = false;
+          setNow(null);
           setAudio("idle");
-          setNow(null);
-          setQueue((q) => q.slice(1));
-        };
-        a.onerror = () => {
-          URL.revokeObjectURL(url);
-          playingRef.current = false;
-          setAudio("error");
-          setNow(null);
-          setQueue((q) => q.slice(1));
-        };
-        await a.play();
+          return;
+        }
+        const blob = new Blob([buf], { type: "audio/mpeg" });
+        objectUrl = URL.createObjectURL(blob);
+        player = new Audio(objectUrl);
+        audioRef.current = player;
+        player.onended = () => finish("idle");
+        player.onerror = () => finish("error");
+        await player.play();
         if (!cancelled) setAudio("playing");
       } catch {
-        playingRef.current = false;
-        setAudio("error");
-        setNow(null);
-        setQueue((q) => q.slice(1));
+        if (!cancelled) {
+          finish("error");
+        } else {
+          playingRef.current = false;
+          setNow(null);
+          setAudio("idle");
+        }
       }
     })();
     return () => {
       cancelled = true;
+      if (player) {
+        player.pause();
+      }
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+      }
+      if (audioRef.current === player) {
+        audioRef.current = null;
+      }
+      playingRef.current = false;
     };
-  }, [queue]);
+  }, [activeHeadId]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);
