@@ -185,18 +185,18 @@ def _quarantine_node(state: SentinelState) -> SentinelState:
         "sentinel_run_id": run_id,
         "investigation_id": f"inv_{uuid.uuid4().hex[:6]}",
         "siblings_found": [],
-        "dossier_text": state.get("nemotron_explanation", ""),
+        "sentinel_explanation": state.get("nemotron_explanation", ""),
     }
     written = False
     try:
         db[QUARANTINE].insert_one(doc)
         written = True
     except DuplicateKeyError:
-        # Update dossier text if the explanation is richer than a stub.
+        # Do not overwrite a Forensic Auditor dossier on duplicate deliveries.
         if state.get("nemotron_explanation"):
             db[QUARANTINE].update_one(
                 {"quarantine_id": qid},
-                {"$set": {"dossier_text": state["nemotron_explanation"]}},
+                {"$set": {"sentinel_explanation": state["nemotron_explanation"]}},
             )
 
     db[MEMORIES].update_one(

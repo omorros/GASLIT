@@ -122,6 +122,7 @@ export const SCENARIO_DAYS: DaySpec[] = [
 export type ScenarioState = {
   currentDay: number; // 0 = start, 1..5 = a day, 6 = done
   busy: boolean;
+  error?: string | null;
 };
 
 export type ScenarioHandlers = {
@@ -133,6 +134,7 @@ export type ScenarioHandlers = {
 
 export function useScenarioPlayer(handlers: ScenarioHandlers) {
   const [state, setState] = useState<ScenarioState>({ currentDay: 0, busy: false });
+  const busyRef = useRef(false);
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
@@ -145,10 +147,11 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
   }, [state.currentDay, totalDays]);
 
   const advance = useCallback(async () => {
-    if (state.busy) return;
+    if (state.busy || busyRef.current) return;
     const next = state.currentDay + 1;
     if (next > totalDays) return;
-    setState({ currentDay: next, busy: true });
+    busyRef.current = true;
+    setState({ currentDay: next, busy: true, error: null });
 
     const spec = SCENARIO_DAYS[next - 1];
     try {
@@ -164,17 +167,26 @@ export function useScenarioPlayer(handlers: ScenarioHandlers) {
       if (spec.backend) {
         for (const action of spec.backend) {
           if (action === "trigger_drift") {
-            await postTriggerDrift().catch(() => null);
+            await postTriggerDrift();
           }
         }
       }
+    } catch (e) {
+      setState({
+        currentDay: next - 1,
+        busy: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return;
     } finally {
-      setState({ currentDay: next, busy: false });
+      busyRef.current = false;
     }
+    setState({ currentDay: next, busy: false, error: null });
   }, [state.busy, state.currentDay, totalDays]);
 
   const reset = useCallback(() => {
-    setState({ currentDay: 0, busy: false });
+    busyRef.current = false;
+    setState({ currentDay: 0, busy: false, error: null });
   }, []);
 
   return {
