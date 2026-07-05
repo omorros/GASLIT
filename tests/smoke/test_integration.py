@@ -34,7 +34,7 @@ load_dotenv()
 
 HIGH_VALUE_REFUND = {
     "message": "Can you process a $4,800 refund for my premium account?",
-    "user_id": "u_HIGH_VALUE",
+    "user_id": "u_2188",
     "thread_id": "t_demo_trigger",
     "turn_number": 3,
     "tool_name": "refund_request",
@@ -42,7 +42,7 @@ HIGH_VALUE_REFUND = {
 
 
 def main() -> int:
-    api = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api = f"http://127.0.0.1:{os.environ.get('API_PORT', '8002')}"
     db = MongoClient(os.environ["MONGODB_URI"])[DB_NAME]
 
     # Pre-flight: poisoned memory must be in DB.
