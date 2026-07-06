@@ -200,8 +200,8 @@ export async function launchMinja(narrationDelayMs = 1500): Promise<MinjaLaunch>
 export type FloodLaunch = { run_id: string; duration_s: number; qps: number; source: string };
 
 export async function postScenarioFlood(
-  durationS = 15,
-  qps = 5,
+  durationS = 10,
+  qps = 1,
   source: "canned" | "live" = "canned",
 ): Promise<FloodLaunch> {
   const r = await apiFetch(apiUrl("/api/scenario/flood"), {

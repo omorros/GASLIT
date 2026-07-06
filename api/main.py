@@ -166,7 +166,7 @@ def unprotected_agent(req: AgentRequest):
     try:
         memories = retrieve_unprotected(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "unprotected"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -194,7 +194,7 @@ def gaslit_agent(req: AgentRequest):
     try:
         audit = retrieve_with_audit(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "librarian"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -254,11 +254,13 @@ def trust_score():
 import uuid as _uuid
 
 _FLOOD_RUNS: dict[str, dict[str, Any]] = {}
+_FLOOD_LOCK = threading.Lock()
+_ACTIVE_FLOOD_RUN_ID: Optional[str] = None
 
 
 class FloodRequest(BaseModel):
-    duration_s: int = Field(default=15, ge=2, le=120)
-    qps: float = Field(default=5.0, ge=0.2, le=15.0)
+    duration_s: int = Field(default=10, ge=2, le=30)
+    qps: float = Field(default=1.0, ge=0.2, le=2.0)
     source: str = Field(default="canned", pattern="^(canned|live)$")
 
 
@@ -277,6 +279,18 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
     Used by the Operator Console "Flood" scenario to make the drift gauge climb.
     """
     from gaslit.adversary.live_traffic import stream_traffic
+    global _ACTIVE_FLOOD_RUN_ID
+
+    with _FLOOD_LOCK:
+        if _ACTIVE_FLOOD_RUN_ID:
+            active = _FLOOD_RUNS.get(_ACTIVE_FLOOD_RUN_ID, {})
+            if active.get("status") == "running":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"flood run {_ACTIVE_FLOOD_RUN_ID} is already running",
+                )
+            _ACTIVE_FLOOD_RUN_ID = None
+
     run_id = f"flood_{_uuid.uuid4().hex[:8]}"
     _FLOOD_RUNS[run_id] = {
         "started_at": datetime.now(timezone.utc).isoformat(),
@@ -286,8 +300,10 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
         "status": "running",
         "sent": 0,
     }
+    _ACTIVE_FLOOD_RUN_ID = run_id
 
     def _run() -> None:
+        global _ACTIVE_FLOOD_RUN_ID
         try:
             sent = stream_traffic(req.duration_s, req.qps, source=req.source)
             _FLOOD_RUNS[run_id]["sent"] = int(sent)
@@ -297,6 +313,9 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
             _FLOOD_RUNS[run_id]["error"] = repr(exc)
         finally:
             _FLOOD_RUNS[run_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            with _FLOOD_LOCK:
+                if _ACTIVE_FLOOD_RUN_ID == run_id:
+                    _ACTIVE_FLOOD_RUN_ID = None
 
     threading.Thread(target=_run, daemon=True, name=run_id).start()
     return FloodResponse(

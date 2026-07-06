@@ -56,7 +56,12 @@ export function DossierPanel({
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        if (cancelled) {
+          playingRef.current = false;
+          setNow(null);
+          setAudio("idle");
+          return;
+        }
         const blob = new Blob([buf], { type: "audio/mpeg" });
         const url = URL.createObjectURL(blob);
         const a = new Audio(url);
@@ -87,7 +92,7 @@ export function DossierPanel({
     return () => {
       cancelled = true;
     };
-  }, [queue]);
+  }, [queue[0]?.id]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);
