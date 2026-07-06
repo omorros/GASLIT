@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json as json_stdlib
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import numpy as np
@@ -25,9 +25,11 @@ from pymongo import MongoClient
 from gaslit.schemas import (
     AGENT_REGISTRY,
     DB_NAME,
+    DRIFT_THRESHOLD,
     MEMORIES,
     QUARANTINE,
     RETRIEVAL_LOG,
+    QUARANTINE_TTL_SECONDS,
 )
 
 
@@ -137,17 +139,13 @@ def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
     cohort variance, cross the 0.62 threshold, and write a quarantine doc.
     """
     db = _db()
-    if not db[MEMORIES].find_one({"memory_id": req.memory_id}, {"_id": 1}):
+    memory = db[MEMORIES].find_one(
+        {"memory_id": req.memory_id},
+        {"_id": 0, "source_text": 1, "user_id": 1},
+    )
+    if not memory:
         raise HTTPException(status_code=404,
                             detail=f"memory_id {req.memory_id} not in corpus")
-
-    db[RETRIEVAL_LOG].delete_many({"memory_id": req.memory_id})
-    db[MEMORIES].update_one(
-        {"memory_id": req.memory_id},
-        {"$set": {"drift_score": 0.0, "cohort_variance": 0.0,
-                  "retrieval_count": 0, "quarantined": False}},
-    )
-    db[QUARANTINE].delete_many({"memory_id": req.memory_id})
 
     rng = np.random.default_rng(7)
     c1 = rng.normal(size=1024).astype(np.float32)
@@ -173,15 +171,56 @@ def demo_trigger_drift(req: TriggerDriftReq) -> TriggerDriftResp:
             "score": 0.85,
             "agent_id": "librarian",
             "filtered": False,
+            "demo_synthetic": True,
         })
     if docs:
         res = db[RETRIEVAL_LOG].insert_many(docs)
         inserted = len(res.inserted_ids)
 
+    now = datetime.now(timezone.utc)
+    db[MEMORIES].update_one(
+        {"memory_id": req.memory_id},
+        {"$set": {
+            "drift_score": max(DRIFT_THRESHOLD + 0.1, 0.72),
+            "cohort_variance": 6.0,
+            "quarantined": True,
+        }, "$inc": {"retrieval_count": inserted}},
+    )
+    qid = f"q_demo_{req.memory_id}"
+    db[QUARANTINE].update_one(
+        {"quarantine_id": qid},
+        {
+            "$setOnInsert": {
+                "quarantine_id": qid,
+                "memory_id": req.memory_id,
+                "quarantined_at": now,
+                "expires_at": now + timedelta(seconds=QUARANTINE_TTL_SECONDS),
+                "responsible_user": memory.get("user_id", ""),
+                "sentinel_run_id": "demo-trigger-drift",
+                "investigation_id": f"inv_demo_{req.memory_id}",
+                "siblings_found": [],
+                "hmac_verified": True,
+            },
+            "$set": {
+                "drift_score": max(DRIFT_THRESHOLD + 0.1, 0.72),
+                "cohort_variance": 6.0,
+                "sentinel_explanation": (
+                    f"Demo drift injection appended {inserted} retrieval rows for "
+                    f"{req.memory_id}; existing retrieval and quarantine evidence "
+                    "was preserved."
+                ),
+            },
+        },
+        upsert=True,
+    )
+
     return TriggerDriftResp(
         memory_id=req.memory_id,
         inserted=inserted,
-        note="Sentinel will evaluate drift on Change Stream; poll /api/memories and /api/sentinel-status.",
+        note=(
+            "Demo drift rows appended and target memory marked quarantined; existing "
+            "retrieval/quarantine evidence was preserved."
+        ),
     )
 
 
