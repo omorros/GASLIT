@@ -111,8 +111,8 @@ export const SCENARIO_DAYS: DaySpec[] = [
     expectedDivergence: true,
     prompts: [
       {
-        user_id: "u_HIGH_VALUE",
-        label: "u_HIGH_VALUE (real customer)",
+        user_id: "u_2188",
+        label: "u_2188 (seeded premium customer)",
         message: "Can you process a $4,800 refund for my premium account?",
       },
     ],
