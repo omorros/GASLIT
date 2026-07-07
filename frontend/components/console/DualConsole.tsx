@@ -64,7 +64,7 @@ export function DualConsole({
     setRightVerdict("thinking");
 
     const tn = opts?.turn_number ?? turnCounter.current++;
-    const user_id = opts?.user_id ?? "u_HIGH_VALUE";
+    const user_id = opts?.user_id ?? "u_2188";
     const thread_id = opts?.thread_id ?? threadId.current;
     const ts = Date.now();
     const id = `${ts}_${tn}`;
