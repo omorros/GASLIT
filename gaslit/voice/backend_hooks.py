@@ -2,21 +2,35 @@
 
 from __future__ import annotations
 
+import hashlib
 
-def _voice_ids(room: str | None) -> tuple[str, str, int]:
-    r = (room or "voice").replace(" ", "_")
-    return f"voice:{r}", f"thread:{r}", 1
+
+def _normalize_transcript(transcript: str) -> str:
+    return " ".join(transcript.strip().lower().split())
+
+
+def _voice_ids(room: str | None, transcript: str = "") -> tuple[str, str, int]:
+    r = (room or "voice").strip().replace(" ", "_") or "voice"
+    if r == "attacker_room":
+        user_id = "u_2188"
+        thread_id = "t_8821"
+    else:
+        user_id = f"voice:{r}"
+        thread_id = f"thread:{r}"
+    key = f"{r}|{_normalize_transcript(transcript)}"
+    turn_number = int(hashlib.sha256(key.encode()).hexdigest()[:8], 16)
+    return user_id, thread_id, turn_number
 
 
 async def on_voice_transcript(transcript: str, room: str | None, source: str | None) -> dict:
     """Forward speech-as-text into the Scribe memory pipeline."""
     from gaslit.agents.scribe import scribe_turn
 
-    user_id, thread_id, turn_number = _voice_ids(room)
+    user_id, thread_id, turn_number = _voice_ids(room, transcript)
     mem = scribe_turn(user_id, thread_id, turn_number, transcript)
     return {
         "ok": True,
-        "accepted": True,
+        "accepted": mem is not None,
         "transcript": transcript,
         "room": room,
         "source": source,
