@@ -35,7 +35,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
@@ -166,7 +166,7 @@ def unprotected_agent(req: AgentRequest):
     try:
         memories = retrieve_unprotected(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "unprotected"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "unprotected"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -194,7 +194,7 @@ def gaslit_agent(req: AgentRequest):
     try:
         audit = retrieve_with_audit(
             req.message,
-            {"tool_name": tool_name, "user_id": None, "agent_id": "librarian"},
+            {"tool_name": tool_name, "user_id": req.user_id, "agent_id": "librarian"},
         )
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -254,6 +254,7 @@ def trust_score():
 import uuid as _uuid
 
 _FLOOD_RUNS: dict[str, dict[str, Any]] = {}
+_FLOOD_LOCK = threading.Lock()
 
 
 class FloodRequest(BaseModel):
@@ -270,13 +271,32 @@ class FloodResponse(BaseModel):
 
 
 @app.post("/api/scenario/flood", response_model=FloodResponse, status_code=202)
-def scenario_flood(req: FloodRequest = FloodRequest()):
+def scenario_flood(request: Request, req: FloodRequest = FloodRequest()):
     """Burst paired requests into both agents to drive cohort variance / drift.
 
     Wraps `gaslit.adversary.live_traffic.stream_traffic` in a daemon thread.
     Used by the Operator Console "Flood" scenario to make the drift gauge climb.
     """
     from gaslit.adversary.live_traffic import stream_traffic
+    with _FLOOD_LOCK:
+        active = [
+            r for r in _FLOOD_RUNS.values()
+            if r.get("status") == "running"
+        ]
+        if active:
+            raise HTTPException(status_code=409, detail="flood scenario already running")
+
+        # Keep bounded in-process metadata; completed runs are only status hints.
+        completed = [
+            (run_id, r) for run_id, r in _FLOOD_RUNS.items()
+            if r.get("status") != "running"
+        ]
+        for old_id, _ in sorted(
+            completed,
+            key=lambda item: item[1].get("completed_at", item[1].get("started_at", "")),
+        )[:-10]:
+            _FLOOD_RUNS.pop(old_id, None)
+
     run_id = f"flood_{_uuid.uuid4().hex[:8]}"
     _FLOOD_RUNS[run_id] = {
         "started_at": datetime.now(timezone.utc).isoformat(),
@@ -286,10 +306,16 @@ def scenario_flood(req: FloodRequest = FloodRequest()):
         "status": "running",
         "sent": 0,
     }
+    api_base = str(request.base_url).rstrip("/")
 
     def _run() -> None:
         try:
-            sent = stream_traffic(req.duration_s, req.qps, source=req.source)
+            sent = stream_traffic(
+                req.duration_s,
+                req.qps,
+                source=req.source,
+                api_base=api_base,
+            )
             _FLOOD_RUNS[run_id]["sent"] = int(sent)
             _FLOOD_RUNS[run_id]["status"] = "completed"
         except Exception as exc:
