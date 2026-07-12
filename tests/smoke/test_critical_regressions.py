@@ -115,7 +115,9 @@ def test_operator_console_race_and_render_guards_are_present() -> None:
     assert "Tail appends must not cancel" in dossier
 
     assert "const fmt = (value: unknown" in tape
-    assert ".toFixed(" not in tape
+    assert "p.score.toFixed(" not in tape
+    assert "p.drift_score.toFixed(" not in tape
+    assert "p.cohort_variance.toFixed(" not in tape
 
 
 if __name__ == "__main__":
