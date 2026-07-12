@@ -45,6 +45,7 @@ export function DossierPanel({
   }
 
   // Drain queue serially
+  const activeQueueHeadId = queue[0]?.id;
   useEffect(() => {
     if (playingRef.current) return;
     const head = queue[0];
@@ -87,7 +88,10 @@ export function DossierPanel({
     return () => {
       cancelled = true;
     };
-  }, [queue]);
+    // Only the active head should drive playback. Tail appends must not cancel
+    // an in-flight TTS render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQueueHeadId]);
 
   // Auto-readout when a new quarantine arrives
   const lastQid = useRef<string | null>(null);
