@@ -45,58 +45,69 @@ export function DossierPanel({
   }
 
   // Drain queue serially
+  const queueHeadId = queue[0]?.id ?? null;
   useEffect(() => {
     if (playingRef.current) return;
     const head = queue[0];
     if (!head) return;
     let cancelled = false;
+    let objectUrl: string | null = null;
+
+    function finish(status: "idle" | "error") {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+      }
+      playingRef.current = false;
+      setAudio(status);
+      setNow(null);
+      setQueue((q) => (q[0]?.id === head.id ? q.slice(1) : q));
+    }
+
     (async () => {
       playingRef.current = true;
       setNow(head);
       setAudio("loading");
       try {
         const buf = await postTTS(head.text, "forensic");
-        if (cancelled) return;
+        if (cancelled) {
+          playingRef.current = false;
+          return;
+        }
         const blob = new Blob([buf], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
-        const a = new Audio(url);
+        objectUrl = URL.createObjectURL(blob);
+        const a = new Audio(objectUrl);
         audioRef.current = a;
-        a.onended = () => {
-          URL.revokeObjectURL(url);
-          playingRef.current = false;
-          setAudio("idle");
-          setNow(null);
-          setQueue((q) => q.slice(1));
-        };
-        a.onerror = () => {
-          URL.revokeObjectURL(url);
-          playingRef.current = false;
-          setAudio("error");
-          setNow(null);
-          setQueue((q) => q.slice(1));
-        };
+        a.onended = () => finish("idle");
+        a.onerror = () => finish("error");
         await a.play();
         if (!cancelled) setAudio("playing");
       } catch {
-        playingRef.current = false;
-        setAudio("error");
-        setNow(null);
-        setQueue((q) => q.slice(1));
+        if (!cancelled) finish("error");
+        else playingRef.current = false;
       }
     })();
     return () => {
       cancelled = true;
+      if (audioRef.current) audioRef.current.pause();
+      playingRef.current = false;
     };
-  }, [queue]);
+  }, [queueHeadId]);
 
   // Auto-readout when a new quarantine arrives
-  const lastQid = useRef<string | null>(null);
+  const lastSpoken = useRef<{ qid: string; text: string } | null>(null);
   useEffect(() => {
-    if (!latest?.quarantine_id || !latest.dossier_text?.trim()) return;
-    if (latest.quarantine_id === lastQid.current) return;
-    lastQid.current = latest.quarantine_id;
-    enqueue(latest.dossier_text);
-  }, [latest]);
+    if (!latest?.quarantine_id) {
+      lastSpoken.current = null;
+      return;
+    }
+    if (!latest.dossier_text?.trim()) return;
+    const text = latest.dossier_text;
+    const previous = lastSpoken.current;
+    if (previous?.qid === latest.quarantine_id && previous.text === text) return;
+    lastSpoken.current = { qid: latest.quarantine_id, text };
+    enqueue(text);
+  }, [latest?.quarantine_id, latest?.dossier_text]);
 
   function toggleMute() {
     if (!audioRef.current) return;

@@ -47,6 +47,7 @@ export function DualConsole({
   const [rightVerdict, setRightVerdict] = useState<Verdict>("idle");
   const [leftBalance, setLeftBalance] = useState(TREASURY_INITIAL);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const turnCounter = useRef(1);
   const threadId = useRef(`t_console_${Math.random().toString(36).slice(2, 10)}`);
 
@@ -57,7 +58,8 @@ export function DualConsole({
     message: string,
     opts?: { user_id?: string; thread_id?: string; turn_number?: number; tool_name?: string },
   ) {
-    if (!message.trim() || busy) return {};
+    if (!message.trim() || busyRef.current) return {};
+    busyRef.current = true;
     setBusy(true);
     onBusyChange?.(true);
     setLeftVerdict("thinking");
@@ -124,11 +126,15 @@ export function DualConsole({
     }
 
     setBusy(false);
+    busyRef.current = false;
     onBusyChange?.(false);
     return { left: leftRes, right: rightRes };
   }
 
   function reset() {
+    busyRef.current = false;
+    setBusy(false);
+    onBusyChange?.(false);
     setLeftLog([]);
     setRightLog([]);
     setLeftVerdict("idle");

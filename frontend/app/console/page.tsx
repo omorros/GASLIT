@@ -37,6 +37,7 @@ export default function ConsolePage() {
   const scenario = useScenarioPlayer({ dualSend });
   const spec = scenario.spec;
   const latestQuarantine = ev.quarantines[0];
+  const visibleQuarantine = scenario.state.currentDay >= 4 ? latestQuarantine : undefined;
   const sentinelOnline = sentinel?.status === "online";
 
   const manualSend = useCallback(
@@ -45,6 +46,12 @@ export default function ConsolePage() {
     },
     [dualSend],
   );
+
+  const resetScenario = useCallback(() => {
+    scenario.reset();
+    dualHandleRef.current?.reset();
+    ev.reset();
+  }, [ev, scenario]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--op-bg)] text-[var(--op-text)]">
@@ -89,9 +96,10 @@ export default function ConsolePage() {
           currentDay={scenario.state.currentDay}
           spec={spec}
           busy={scenario.state.busy}
+          error={scenario.state.error}
           isDone={scenario.isDone}
           onAdvance={scenario.advance}
-          onReset={scenario.reset}
+          onReset={resetScenario}
         />
 
         {/* Storyline narrative + drift gauge */}
@@ -159,7 +167,7 @@ export default function ConsolePage() {
         </section>
 
         {/* Forensic dossier + interactive Q&A — only meaningful after Day 4 */}
-        <DossierPanel latest={latestQuarantine} />
+        <DossierPanel latest={visibleQuarantine} />
       </main>
     </div>
   );
