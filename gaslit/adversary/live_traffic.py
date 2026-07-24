@@ -67,7 +67,7 @@ def load_canned() -> list[str]:
 def stream_traffic(duration_s: int = 60, qps: float = 1.0,
                    *, source: str = "canned") -> int:
     """Send queries at ~qps for duration_s seconds. Returns the number sent."""
-    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8000')}"
+    api_base = f"http://127.0.0.1:{os.environ.get('API_PORT', '8002')}"
     queries: list[str]
     if source == "live":
         try:
@@ -103,8 +103,10 @@ def stream_traffic(duration_s: int = 60, qps: float = 1.0,
                 "turn_number": 1,
             }
             try:
-                client.post("/api/unprotected-agent", json=payload)
-                client.post("/api/gaslit-agent", json=payload)
+                left = client.post("/api/unprotected-agent", json=payload)
+                right = client.post("/api/gaslit-agent", json=payload)
+                left.raise_for_status()
+                right.raise_for_status()
                 sent += 1
             except Exception as e:
                 print(f"[live_traffic] post error: {e}")

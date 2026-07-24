@@ -33,6 +33,7 @@ export type QuarantinePayload = {
   responsible_user?: string;
   siblings_found?: string[];
   dossier_text?: string;
+  dossier_composed_at?: string;
   investigation_id?: string;
 };
 
