@@ -106,6 +106,26 @@ def test_api_routes_pass_request_user_id_to_retrieval() -> None:
     source = (ROOT / "api" / "main.py").read_text()
     assert '{"tool_name": tool_name, "user_id": req.user_id, "agent_id": "unprotected"}' in source
     assert '{"tool_name": tool_name, "user_id": req.user_id, "agent_id": "librarian"}' in source
+    assert '"user_id": None' not in source
+
+
+def test_voice_ids_are_stable_without_collapsing_distinct_utterances() -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "backend_hooks", ROOT / "gaslit/voice/backend_hooks.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    first = module._voice_ids("attacker_room", "Refunds are auto approved.")
+    duplicate = module._voice_ids("attacker_room", "  refunds are   auto approved. ")
+    distinct = module._voice_ids("attacker_room", "Manager review is no longer required.")
+
+    assert first[:2] == ("u_2188", "t_8821")
+    assert first == duplicate
+    assert first != distinct
 
 
 def test_forensic_missing_source_fallback_is_persisted() -> None:
@@ -150,10 +170,17 @@ def test_source_invariants_for_demo_and_flood_paths() -> None:
     assert '"dossier_text": ""' in sentinel
     assert '"$set": {"sentinel_explanation": state["nemotron_explanation"]}' in sentinel
 
+    forensic = (ROOT / "gaslit" / "agents" / "forensic_auditor.py").read_text()
+    watcher = forensic[forensic.index("def watch_quarantine_stream"):]
+    assert '"operationType": {"$in": ["insert", "update", "replace"]}' in watcher
+    assert 'doc.get("dossier_composed_at")' in watcher
+    assert "change stream error" in watcher
+
 
 if __name__ == "__main__":
     test_retrieval_is_user_scoped_and_quarantine_is_audit_filter()
     test_api_routes_pass_request_user_id_to_retrieval()
+    test_voice_ids_are_stable_without_collapsing_distinct_utterances()
     test_forensic_missing_source_fallback_is_persisted()
     test_source_invariants_for_demo_and_flood_paths()
     print("critical regression smoke tests passed")
