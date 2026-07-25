@@ -61,6 +61,7 @@ from pymongo.errors import DuplicateKeyError
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.graph import END, START, StateGraph
 
+from gaslit.agents.debounce import TrailingDebouncer
 from gaslit.agents.sentinel_fallback import compute_drift
 from gaslit.agents.sentinel_nemotron import explain_drift
 from gaslit.schemas import (
@@ -263,8 +264,25 @@ def _watch_loop(stop_event: threading.Event, run_id: str) -> None:
     log.info("sentinel watching %s.%s run_id=%s mode=%s",
              DB_NAME, RETRIEVAL_LOG, run_id, SENTINEL_MODE)
 
-    last_eval: dict[str, float] = {}
     pipeline = [{"$match": {"operationType": "insert"}}]
+
+    def _evaluate(mid: str) -> None:
+        if stop_event.is_set():
+            return
+        thread_id = f"sentinel-{mid}"
+        config = {"configurable": {"thread_id": thread_id}}
+        try:
+            graph.invoke(
+                {
+                    "memory_id": mid,
+                    "sentinel_run_id": run_id,
+                },
+                config=config,
+            )
+        except Exception as invoke_exc:
+            log.warning("graph invoke failed for %s: %s", mid, invoke_exc)
+
+    debouncer = TrailingDebouncer(EVAL_DEBOUNCE_S, _evaluate)
 
     while not stop_event.is_set():
         try:
@@ -276,30 +294,15 @@ def _watch_loop(stop_event: threading.Event, run_id: str) -> None:
                     mid = doc.get("memory_id")
                     if not mid:
                         continue
-                    now = time.time()
-                    if mid in last_eval and now - last_eval[mid] < EVAL_DEBOUNCE_S:
-                        continue
-                    last_eval[mid] = now
-
-                    thread_id = f"sentinel-{mid}"
-                    config = {"configurable": {"thread_id": thread_id}}
-                    try:
-                        graph.invoke(
-                            {
-                                "memory_id": mid,
-                                "sentinel_run_id": run_id,
-                            },
-                            config=config,
-                        )
-                    except Exception as invoke_exc:
-                        log.warning("graph invoke failed for %s: %s",
-                                    mid, invoke_exc)
+                    debouncer.kick(mid)
         except Exception as exc:
             if stop_event.is_set():
                 break
             log.warning("change-stream error (%s); restarting in 2s",
                         type(exc).__name__)
             time.sleep(2)
+
+    debouncer.cancel_all()
 
     _register_agent_status(db, "offline", run_id=run_id)
     log.info("sentinel loop stopped run_id=%s", run_id)
