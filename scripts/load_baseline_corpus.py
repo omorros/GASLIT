@@ -1,8 +1,9 @@
 """Load fixtures/corpus.json into MongoDB Atlas.
 
 For each entry: insert a memory document into `memories` AND a provenance
-document into `belief_provenance` in a single transaction. Idempotent —
-re-running skips memories that already exist by memory_id.
+document into `belief_provenance`. Idempotent — re-running skips memories
+that already exist by memory_id and never re-signs live (possibly tampered)
+documents.
 
 Usage:
   python scripts/load_baseline_corpus.py
@@ -27,6 +28,26 @@ from gaslit.provenance.hmac import sha256_hex, sign, signing_fields
 from gaslit.schemas import MEMORIES, BELIEF_PROVENANCE, DB_NAME
 
 load_dotenv()
+
+# Fields that must match the fixture when a memory already exists. Mutating
+# any of these and re-running the loader must fail closed — never mint a
+# fresh attestation over the live document.
+_IMMUTABLE_FIELDS = (
+    "source_text",
+    "source_type",
+    "user_id",
+    "thread_id",
+    "turn_number",
+    "parent_memory_id",
+)
+
+
+def _immutable_mismatch(live: dict, fixture: dict) -> list[str]:
+    bad: list[str] = []
+    for key in _IMMUTABLE_FIELDS:
+        if live.get(key) != fixture.get(key):
+            bad.append(key)
+    return bad
 
 
 def main() -> int:
@@ -73,7 +94,7 @@ def main() -> int:
         })
 
     inserted_m = 0
-    refreshed_p = 0
+    inserted_p = 0
     for memory_doc, fixture_doc in zip(memory_docs, docs):
         memory_result = db[MEMORIES].update_one(
             {"memory_id": memory_doc["memory_id"]},
@@ -82,33 +103,47 @@ def main() -> int:
         )
         if memory_result.upserted_id is not None:
             inserted_m += 1
+        else:
+            live_memory = db[MEMORIES].find_one(
+                {"memory_id": memory_doc["memory_id"]}, {"_id": 0}
+            ) or {}
+            mismatch = _immutable_mismatch(live_memory, memory_doc)
+            if mismatch:
+                print(
+                    f"[load] REFUSING to continue: {memory_doc['memory_id']} "
+                    f"diverged from fixture on {', '.join(mismatch)}. "
+                    "Use --reset to reload from fixtures, or restore the "
+                    "canonical document before signing provenance.",
+                    file=sys.stderr,
+                )
+                return 3
 
-        live_memory = db[MEMORIES].find_one(
-            {"memory_id": memory_doc["memory_id"]}, {"_id": 0}
-        ) or memory_doc
+        # Always attest the fixture/canonical fields — never the live row.
         tool_output_hashes = fixture_doc.get("_provenance", {}).get("tool_output_hashes", [])
-        source_text_hash = sha256_hex(live_memory["source_text"])
-        fields = signing_fields(live_memory, source_text_hash, tool_output_hashes)
+        source_text_hash = sha256_hex(memory_doc["source_text"])
+        fields = signing_fields(memory_doc, source_text_hash, tool_output_hashes)
         provenance = {
-            "memory_id": live_memory["memory_id"],
+            "memory_id": memory_doc["memory_id"],
             "source_text_hash": source_text_hash,
             "tool_output_hashes": tool_output_hashes,
-            "parent_memory_id": live_memory.get("parent_memory_id"),
+            "parent_memory_id": memory_doc.get("parent_memory_id"),
             "attestation": sign(fields),
             "written_at": now,
         }
+        # $setOnInsert keeps idempotent reloads from overwriting a good
+        # attestation (or, worse, minting one for tampered live content).
         prov_result = db[BELIEF_PROVENANCE].update_one(
-            {"memory_id": live_memory["memory_id"]},
-            {"$set": provenance},
+            {"memory_id": memory_doc["memory_id"]},
+            {"$setOnInsert": provenance},
             upsert=True,
         )
-        if prov_result.upserted_id is not None or prov_result.modified_count:
-            refreshed_p += 1
+        if prov_result.upserted_id is not None:
+            inserted_p += 1
 
     n_m_total = db[MEMORIES].count_documents({})
     n_p_total = db[BELIEF_PROVENANCE].count_documents({})
     n_quar = db[MEMORIES].count_documents({"user_id": "u_2188"})
-    print(f"[load] inserted +{inserted_m} memories, refreshed {refreshed_p} provenance attestations")
+    print(f"[load] inserted +{inserted_m} memories, +{inserted_p} provenance attestations")
     print(f"[load] totals: memories={n_m_total}, provenance={n_p_total}, u_2188 (poisoned author)={n_quar}")
     return 0
 

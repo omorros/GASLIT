@@ -38,7 +38,7 @@ from pymongo import MongoClient
 from pymongo.database import Database
 
 from gaslit.embeddings import embed_query
-from gaslit.provenance.hmac import verify, signing_fields
+from gaslit.provenance.hmac import sha256_hex, verify, signing_fields
 from gaslit.retrieval.contracts import get_contract
 from gaslit.retrieval.hybrid import hybrid_retrieve
 from gaslit.schemas import BELIEF_PROVENANCE, RETRIEVAL_LOG, DB_NAME
@@ -84,10 +84,20 @@ def _passes_filters(memory: dict, filters: list[dict]) -> bool:
 
 # ─── HMAC verification ────────────────────────────────────────────────
 def _verify_provenance(db: Database, memory: dict) -> bool:
+    """Reject when live source_text no longer matches the signed hash.
+
+    The attestation alone is not enough: an attacker who mutates
+    ``memories.source_text`` in place would otherwise keep a valid
+    provenance row (same metadata + stored hash) and pass high-stakes
+    retrieval. Recompute the hash from the live document first.
+    """
     prov = db[BELIEF_PROVENANCE].find_one(
         {"memory_id": memory["memory_id"]}, {"_id": 0}
     )
     if not prov:
+        return False
+    live_hash = sha256_hex(memory.get("source_text") or "")
+    if live_hash != prov.get("source_text_hash"):
         return False
     fields = signing_fields(memory, prov["source_text_hash"],
                             prov.get("tool_output_hashes", []))
