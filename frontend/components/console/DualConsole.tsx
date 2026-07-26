@@ -6,6 +6,7 @@ import {
   postGaslitAgent,
   type AgentResponse,
 } from "@/lib/api";
+import { allocateTurn } from "@/lib/turnCounter";
 import { FiredBlockedBadge, type Verdict } from "./FiredBlockedBadge";
 import { MoneyLedger } from "./MoneyLedger";
 import { cn } from "@/lib/utils";
@@ -63,7 +64,7 @@ export function DualConsole({
     setLeftVerdict("thinking");
     setRightVerdict("thinking");
 
-    const tn = opts?.turn_number ?? turnCounter.current++;
+    const tn = allocateTurn(turnCounter, opts?.turn_number);
     const user_id = opts?.user_id ?? "u_HIGH_VALUE";
     const thread_id = opts?.thread_id ?? threadId.current;
     const ts = Date.now();
