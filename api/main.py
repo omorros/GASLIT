@@ -128,7 +128,12 @@ def infer_tool(message: str) -> str:
         return "transfer_funds"
     if "delete" in m and "account" in m:
         return "delete_account"
-    if "send" in m and ("email" in m or "external" in m):
+    # External email is high-stakes (send_external_*). Must be checked before
+    # the generic send_email write-tier rule, or poisoned user_distillation
+    # memories skip HMAC / tool_grounded gates on outbound mail intents.
+    if "email" in m and "external" in m:
+        return "send_external_email"
+    if "send" in m and "email" in m:
         return "send_email"
     if "balance" in m:
         return "get_balance"
