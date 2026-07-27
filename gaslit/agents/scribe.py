@@ -6,10 +6,12 @@ Per turn:
   3. SHA-256(source_text) + HMAC-SHA256 attestation over canonical fields
   4. Atomic transaction: insert into `memories` AND `belief_provenance`
 
-memory_id is deterministic from (user_id, thread_id, turn_number) so the same
-turn submitted to both /api/unprotected-agent and /api/gaslit-agent only ever
-writes ONE memory — the second insert hits the unique index and we treat the
-DuplicateKeyError as success.
+memory_id is deterministic from (user_id, thread_id, turn_number[, content_key])
+so the same turn submitted to both /api/unprotected-agent and /api/gaslit-agent
+only ever writes ONE memory — the second insert hits the unique index and we
+treat the DuplicateKeyError as success. scribe_turn also folds a hash of the
+raw user message into the id so distinct messages that accidentally reuse the
+same turn_number (e.g. API default turn_number=1) are not silently dropped.
 
 PRD §4.1, §5.
 """
@@ -97,8 +99,22 @@ def distil(user_message: str) -> Optional[dict]:
 
 
 # ─── Memory ID derivation ─────────────────────────────────────────────
-def deterministic_memory_id(user_id: str, thread_id: str, turn_number: int) -> str:
-    h = hashlib.sha256(f"{user_id}|{thread_id}|{turn_number}".encode()).hexdigest()
+def deterministic_memory_id(
+    user_id: str,
+    thread_id: str,
+    turn_number: int,
+    content_key: str | None = None,
+) -> str:
+    """Stable memory_id for idempotent dual-agent writes.
+
+    When ``content_key`` is set (scribe_turn passes a hash of the raw user
+    message), two different messages that share the same turn_number produce
+    distinct ids instead of the second write being swallowed by DuplicateKeyError.
+    """
+    base = f"{user_id}|{thread_id}|{turn_number}"
+    if content_key:
+        base = f"{base}|{content_key}"
+    h = hashlib.sha256(base.encode()).hexdigest()
     return f"m_{h[:10]}"
 
 
@@ -172,6 +188,11 @@ def scribe_turn(user_id: str, thread_id: str, turn_number: int,
 
     Errors in distillation log a warning but don't raise — the chat path must
     not be blocked by Scribe failures.
+
+    memory_id includes a hash of the raw user_message so dual-agent posts of the
+    same message remain idempotent, while distinct messages that reuse
+    turn_number (common when clients omit it and hit the API default of 1)
+    each get their own memory instead of a silent no-op.
     """
     try:
         distilled = distil(user_message)
@@ -180,6 +201,10 @@ def scribe_turn(user_id: str, thread_id: str, turn_number: int,
         return None
     if not distilled:
         return None
+    content_key = sha256_hex(user_message.strip())
+    memory_id = deterministic_memory_id(
+        user_id, thread_id, turn_number, content_key=content_key,
+    )
     try:
         return write_memory(
             user_id=user_id,
@@ -188,6 +213,7 @@ def scribe_turn(user_id: str, thread_id: str, turn_number: int,
             source_text=distilled["memory_text"],
             source_type=distilled["source_type"],
             confidence=distilled["confidence"],
+            memory_id=memory_id,
         )
     except Exception as e:
         print(f"[scribe] write_memory error: {e}")
