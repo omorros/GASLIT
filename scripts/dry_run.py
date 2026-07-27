@@ -36,7 +36,20 @@ from gaslit.schemas import (
 
 load_dotenv()
 
-PY = str(REPO / ".venv" / "Scripts" / "python.exe")
+# Prefer the active interpreter; fall back to platform-local venv layouts.
+def _resolve_py() -> str:
+    candidates = [
+        Path(sys.executable),
+        REPO / ".venv" / "bin" / "python",
+        REPO / ".venv" / "Scripts" / "python.exe",
+    ]
+    for c in candidates:
+        if c and Path(c).exists():
+            return str(c)
+    return sys.executable
+
+
+PY = _resolve_py()
 API_PORT = os.environ.get("API_PORT", "8002")
 WS_PORT = os.environ.get("WS_PORT", "8003")
 API = f"http://127.0.0.1:{API_PORT}"
