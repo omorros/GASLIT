@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
 from gaslit.provenance.chain import get_chain
-from gaslit.provenance.hmac import verify, signing_fields
+from gaslit.provenance.hmac import verify_against_live_memory
 from gaslit.schemas import (
     MEMORIES, BELIEF_PROVENANCE, RETRIEVAL_LOG, QUARANTINE, DB_NAME,
 )
@@ -60,16 +60,14 @@ def compliance_export(quarantine_id: str):
         {"_id": 0, "query_embedding": 0},
     ).sort("ts", -1).limit(500))
 
+    # Bind attestation to *live* source_text — stored source_text_hash alone
+    # would let in-place memory tampering keep hmac_verified=true in the
+    # enterprise incident bundle (PRD §12.2).
     hmac_ok = False
     if memory_full:
         prov = db[BELIEF_PROVENANCE].find_one({"memory_id": memory_id})
         if prov:
-            fields = signing_fields(
-                memory_full,
-                prov["source_text_hash"],
-                prov.get("tool_output_hashes", []),
-            )
-            hmac_ok = verify(fields, prov["attestation"])
+            hmac_ok = verify_against_live_memory(memory_full, prov)
 
     bundle = {
         "schema_version": "gaslit.compliance.v1",
