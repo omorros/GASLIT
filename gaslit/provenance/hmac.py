@@ -85,3 +85,25 @@ def signing_fields(memory: dict[str, Any], source_text_hash: str,
         "thread_id": memory.get("thread_id"),
         "turn_number": memory.get("turn_number"),
     }
+
+
+def verify_against_live_memory(memory: dict[str, Any],
+                               provenance: dict[str, Any]) -> bool:
+    """Fail closed unless live ``source_text`` still matches the signed hash.
+
+    Verifying only the attestation over the *stored* ``source_text_hash`` is
+    insufficient: an in-place edit to ``memories.source_text`` would keep a
+    valid HMAC while the compliance bundle (and any retrieval gate that trusted
+    the stored hash alone) reported integrity success for forged content.
+    """
+    if not memory or not provenance:
+        return False
+    live_hash = sha256_hex(memory.get("source_text") or "")
+    if live_hash != provenance.get("source_text_hash"):
+        return False
+    fields = signing_fields(
+        memory,
+        provenance["source_text_hash"],
+        provenance.get("tool_output_hashes", []),
+    )
+    return verify(fields, provenance.get("attestation") or "")
