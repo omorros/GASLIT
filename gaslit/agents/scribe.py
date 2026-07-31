@@ -181,12 +181,16 @@ def scribe_turn(user_id: str, thread_id: str, turn_number: int,
     if not distilled:
         return None
     try:
+        # Never trust the model for source_type — tool_grounded writes are a
+        # separate path. High-stakes contracts + HMAC bind source_type; letting
+        # distillation self-label as tool_grounded would mint a valid attestation
+        # that bypasses the belief-layer gate (PRD §4.1 / §4.3).
         return write_memory(
             user_id=user_id,
             thread_id=thread_id,
             turn_number=turn_number,
             source_text=distilled["memory_text"],
-            source_type=distilled["source_type"],
+            source_type="user_distillation",
             confidence=distilled["confidence"],
         )
     except Exception as e:
