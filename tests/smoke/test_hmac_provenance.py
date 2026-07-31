@@ -22,6 +22,7 @@ def _make():
         "user_id": "u_alice",
         "thread_id": "t_001",
         "turn_number": 1,
+        "source_type": "user_distillation",
     }
     src = "Refunds for premium accounts are auto-approved under $5,000."
     fields = signing_fields(memory, sha256_hex(src), [])
@@ -57,10 +58,18 @@ def test_rejects_user_swap():
     assert not verify(fields, sig)
 
 
+def test_rejects_source_type_swap():
+    _, fields = _make()
+    sig = sign(fields)
+    fields["source_type"] = "tool_grounded"
+    assert not verify(fields, sig)
+
+
 if __name__ == "__main__":
     test_deterministic()
     test_round_trip()
     test_rejects_tampered_text()
     test_rejects_forged_attestation()
     test_rejects_user_swap()
+    test_rejects_source_type_swap()
     print("hmac_provenance smoke tests PASS")

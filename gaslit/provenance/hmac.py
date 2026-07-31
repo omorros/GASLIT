@@ -1,9 +1,10 @@
 """Belief-provenance HMAC-SHA256 signing.
 
-Every memory gets an attestation HMAC over its source_text_hash, tool_output_hashes,
-parent_memory_id, user_id, thread_id, turn_number. An attacker can plant a memory but
-cannot make it look like it came from a high-trust, tool-grounded source — the secret
-lives server-side.
+Every memory gets an attestation HMAC over its source_text_hash, source_type,
+tool_output_hashes, parent_memory_id, user_id, thread_id, turn_number. An attacker
+can plant a memory but cannot make it look like it came from a high-trust,
+tool-grounded source — the secret lives server-side and ``source_type`` is part of
+the signed field set (PRD §4.1).
 
 Production: secret in MongoDB Queryable Encryption.
 Demo: HMAC_SECRET env var. PRD §4.1.
@@ -62,9 +63,12 @@ def verify(fields: dict[str, Any], attestation: str) -> bool:
 
 
 # Field set used for signing — keep this stable. Adding a field is a forking change.
+# source_type is load-bearing: high_stakes contracts gate on tool_grounded, and the
+# PRD promise that HMAC blocks "looks tool-grounded" forgery requires binding it.
 PROVENANCE_FIELDS = (
     "memory_id",
     "source_text_hash",
+    "source_type",
     "tool_output_hashes",
     "parent_memory_id",
     "user_id",
@@ -79,6 +83,7 @@ def signing_fields(memory: dict[str, Any], source_text_hash: str,
     return {
         "memory_id": memory["memory_id"],
         "source_text_hash": source_text_hash,
+        "source_type": memory.get("source_type"),
         "tool_output_hashes": tool_output_hashes or [],
         "parent_memory_id": memory.get("parent_memory_id"),
         "user_id": memory.get("user_id"),

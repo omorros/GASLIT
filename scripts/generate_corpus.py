@@ -234,6 +234,7 @@ def main() -> int:
         sig_fields = {
             "memory_id": mem["memory_id"],
             "source_text_hash": src_hash,
+            "source_type": mem["source_type"],
             "tool_output_hashes": [],
             "parent_memory_id": None,
             "user_id": mem["user_id"],
