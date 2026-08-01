@@ -63,7 +63,7 @@ def compliance_export(quarantine_id: str):
     hmac_ok = False
     if memory_full:
         prov = db[BELIEF_PROVENANCE].find_one({"memory_id": memory_id})
-        if prov:
+        if prov and prov.get("parent_memory_id") == memory_full.get("parent_memory_id"):
             fields = signing_fields(
                 memory_full,
                 prov["source_text_hash"],
