@@ -42,6 +42,7 @@ from pymongo import MongoClient
 
 from gaslit.agents.scribe import scribe_turn
 from gaslit.embeddings import EmbeddingServiceError
+from gaslit.retrieval.auto_approval import looks_like_auto_approval
 from gaslit.retrieval.librarian import (
     retrieve_with_audit, retrieve_unprotected,
 )
@@ -141,15 +142,6 @@ def _strip(memory: dict) -> dict:
     return {k: v for k, v in memory.items() if k not in ("_id", "embedding")}
 
 
-def _looks_like_auto_approval(memories: list[dict]) -> bool:
-    for m in memories:
-        txt = (m.get("source_text") or "").lower()
-        if ("auto-approved" in txt or "auto approved" in txt or
-            "automatically approved" in txt):
-            return True
-    return False
-
-
 # ─── Endpoints ────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
@@ -171,7 +163,7 @@ def unprotected_agent(req: AgentRequest):
     except EmbeddingServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    fired = (tool_name == "refund_request" and _looks_like_auto_approval(memories))
+    fired = (tool_name == "refund_request" and looks_like_auto_approval(memories))
     response = (
         "Processed your refund. You should see it in 3-5 business days."
         if fired else f"Got it: {req.message[:80]}"
@@ -200,7 +192,7 @@ def gaslit_agent(req: AgentRequest):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     fired = (tool_name == "refund_request"
-             and _looks_like_auto_approval(audit["memories"]))
+             and looks_like_auto_approval(audit["memories"]))
     if tool_name == "refund_request" and not fired:
         response = "I'll need to escalate this to a manager."
     elif fired:

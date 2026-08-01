@@ -1,10 +1,13 @@
-"""Walk the belief-provenance chain via $graphLookup.
+"""Walk the belief-provenance chain via signed parent links.
 
 The Forensic Auditor calls `get_chain(memory_id)` after a quarantine event to
 reconstruct the lineage of a poisoned memory. PRD §4.1, §7.
 
-`belief_provenance.parent_memory_id` is indexed (`indexes.py`), so the
-$graphLookup is cheap even for long chains.
+Parent links used for the walk come from ``memories.parent_memory_id`` — the
+field included in the HMAC attestation — not the mutable copy on
+``belief_provenance`` alone. Otherwise an in-place edit to
+``belief_provenance.parent_memory_id`` can fabricate forensic lineage while the
+leaf attestation still verifies.
 """
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.database import Database
 
-from gaslit.schemas import BELIEF_PROVENANCE, DB_NAME
+from gaslit.schemas import BELIEF_PROVENANCE, MEMORIES, DB_NAME
 
 load_dotenv()
 
@@ -36,28 +39,42 @@ def get_chain(memory_id: str, max_depth: int = 32) -> list[dict[str, Any]]:
     Each entry: {memory_id, source_text_hash, parent_memory_id, attestation,
     tool_output_hashes, written_at}.
 
-    Internally uses $graphLookup starting from `memory_id`, walking
-    `parent_memory_id` upward, then sorts by depth so the root comes first.
+    Walks HMAC-bound ``memories.parent_memory_id`` upward, hydrating each hop
+    from ``belief_provenance``. When the two parent fields diverge, the signed
+    memory parent wins and the forged provenance edge is not followed.
     """
-    pipeline = [
-        {"$match": {"memory_id": memory_id}},
-        {"$graphLookup": {
-            "from": BELIEF_PROVENANCE,
-            "startWith": "$parent_memory_id",
-            "connectFromField": "parent_memory_id",
-            "connectToField": "memory_id",
-            "as": "ancestors",
-            "maxDepth": max_depth,
-            "depthField": "depth",
-        }},
-    ]
-    docs = list(_db()[BELIEF_PROVENANCE].aggregate(pipeline))
-    if not docs:
-        return []
-    leaf = docs[0]
-    ancestors = sorted(leaf.pop("ancestors", []), key=lambda d: -d["depth"])
-    chain = [_clean(a) for a in ancestors] + [_clean(leaf)]
-    return chain
+    db = _db()
+    leaf_to_root: list[dict[str, Any]] = []
+    current_id: Optional[str] = memory_id
+    seen: set[str] = set()
+
+    for _ in range(max_depth + 1):
+        if not current_id or current_id in seen:
+            break
+        seen.add(current_id)
+
+        prov = db[BELIEF_PROVENANCE].find_one({"memory_id": current_id})
+        if not prov:
+            break
+
+        mem = db[MEMORIES].find_one(
+            {"memory_id": current_id},
+            {"_id": 0, "parent_memory_id": 1},
+        )
+        if mem is not None:
+            parent = mem.get("parent_memory_id")
+            if prov.get("parent_memory_id") != parent:
+                prov = {**prov, "parent_memory_id": parent}
+        else:
+            # Memory row missing — cannot trust a provenance-only parent edge.
+            parent = None
+            if prov.get("parent_memory_id") is not None:
+                prov = {**prov, "parent_memory_id": None}
+
+        leaf_to_root.append(_clean(prov))
+        current_id = parent
+
+    return list(reversed(leaf_to_root))
 
 
 def _clean(doc: dict[str, Any]) -> dict[str, Any]:

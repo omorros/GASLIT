@@ -89,6 +89,10 @@ def _verify_provenance(db: Database, memory: dict) -> bool:
     )
     if not prov:
         return False
+    # Parent is HMAC-bound on the memory; a divergent provenance copy is
+    # evidence of tampering (and would forge $graphLookup lineage).
+    if prov.get("parent_memory_id") != memory.get("parent_memory_id"):
+        return False
     fields = signing_fields(memory, prov["source_text_hash"],
                             prov.get("tool_output_hashes", []))
     return verify(fields, prov["attestation"])
