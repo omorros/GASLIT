@@ -116,16 +116,56 @@ def auto_register_tools(db: Database, tool_names: list[str]) -> list[dict]:
     return out
 
 
+def _filter_floor(baseline_filters: list[dict], stored_filters: list[dict]) -> list[dict]:
+    """Keep code-defined filter predicates; allow only additive stored extras."""
+    if not baseline_filters:
+        return list(stored_filters)
+    baseline_keys = {k for f in baseline_filters for k in f}
+    extras = [f for f in stored_filters if not (set(f.keys()) & baseline_keys)]
+    return list(baseline_filters) + extras
+
+
+def apply_contract_floor(stored: dict, baseline: dict) -> dict:
+    """Prevent Mongo-persisted contracts from weakening code-defined gates.
+
+    Belief contracts are inspectable/editable in Mongo for the demo UI, but
+    retrieval must never honour a stored document that drops HMAC, empties
+    filters, or marks a high-stakes tool as fail-open.
+    """
+    out = {**baseline, **stored}
+    out["tool_name"] = baseline["tool_name"]
+    out["tier"] = baseline["tier"]
+    out["applies_to_pattern"] = baseline["applies_to_pattern"]
+    out["contract_id"] = stored.get("contract_id") or baseline["contract_id"]
+    # HMAC / fail_open may only get stricter than the code-defined tier.
+    out["requires_hmac"] = bool(baseline.get("requires_hmac")) or bool(
+        stored.get("requires_hmac")
+    )
+    out["fail_open"] = bool(baseline.get("fail_open")) and bool(
+        stored.get("fail_open", False)
+    )
+    out["filters"] = _filter_floor(
+        baseline.get("filters") or [],
+        stored.get("filters") or [],
+    )
+    out["rank_weights"] = stored.get("rank_weights") or baseline["rank_weights"]
+    return out
+
+
 def get_contract(db: Database, tool_name: str) -> dict:
-    """Look up a contract by tool name. Lazy-classifies + persists if missing."""
+    """Look up a contract by tool name. Lazy-classifies + persists if missing.
+
+    Always returns a contract at least as strict as `contract_for(tool_name)`,
+    so a weakened `belief_contracts` document cannot bypass high-stakes gates.
+    """
+    baseline = contract_for(tool_name)
     c = db[BELIEF_CONTRACTS].find_one(
         {"tool_name": tool_name}, {"_id": 0}
     )
-    if c:
-        return c
-    new = contract_for(tool_name)
-    upsert_contract(db, new)
-    return new
+    if not c:
+        upsert_contract(db, baseline)
+        return baseline
+    return apply_contract_floor(c, baseline)
 
 
 # ─── Demo seed (run once at startup so the UI can render contracts) ───
