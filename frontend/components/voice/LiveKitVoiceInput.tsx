@@ -11,6 +11,13 @@ import { RoomEvent, Track, TranscriptionSegment } from "livekit-client";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchLiveKitToken, postVoiceInput } from "@/lib/api";
+import {
+  beginPost,
+  completePost,
+  createVoicePostGate,
+  failPost,
+  shouldPostFinal,
+} from "@/lib/voicePostGate";
 
 type Mode = "livekit" | "web-speech";
 
@@ -143,7 +150,8 @@ export function LiveKitVoiceInput({
   const [err, setErr] = useState<string | null>(null);
   const [transcriptLines, setTranscriptLines] = useState<string[]>([]);
   const [interimLine, setInterimLine] = useState("");
-  const lastPostedFinal = useRef<string>("");
+  const [failedFinal, setFailedFinal] = useState<string | null>(null);
+  const postGate = useRef(createVoicePostGate());
   const identity = useMemo(() => `gaslit-${Math.random().toString(36).slice(2, 10)}`, []);
 
   useEffect(() => {
@@ -168,7 +176,12 @@ export function LiveKitVoiceInput({
     async (text: string) => {
       try {
         await postVoiceInput(text, mode === "web-speech" ? "web-speech" : "livekit", roomName);
+        completePost(postGate.current, text);
+        setFailedFinal(null);
+        setErr(null);
       } catch (e) {
+        failPost(postGate.current, text);
+        setFailedFinal(text.trim());
         setErr(String(e));
       }
     },
@@ -185,6 +198,16 @@ export function LiveKitVoiceInput({
     setInterimLine("");
   }, []);
 
+  const acceptAndPost = useCallback(
+    (text: string, opts?: { skipAppend?: boolean }) => {
+      if (!shouldPostFinal(postGate.current, text)) return;
+      beginPost(postGate.current, text);
+      if (!opts?.skipAppend) appendFinalLine(text);
+      void sendTranscript(text);
+    },
+    [appendFinalLine, sendTranscript],
+  );
+
   const onTranscriptionSegments = useCallback(
     (segments: TranscriptionSegment[]) => {
       const interim = segments
@@ -200,23 +223,16 @@ export function LiveKitVoiceInput({
         .join(" ")
         .trim();
       if (!finalText) return;
-      if (finalText === lastPostedFinal.current) return;
-      lastPostedFinal.current = finalText;
-      appendFinalLine(finalText);
-      void sendTranscript(finalText);
+      acceptAndPost(finalText);
     },
-    [appendFinalLine, sendTranscript],
+    [acceptAndPost],
   );
 
   const onWebSpeechFinal = useCallback(
     (text: string) => {
-      const t = text.trim();
-      if (!t || t === lastPostedFinal.current) return;
-      lastPostedFinal.current = t;
-      appendFinalLine(t);
-      void sendTranscript(t);
+      acceptAndPost(text);
     },
-    [appendFinalLine, sendTranscript],
+    [acceptAndPost],
   );
 
   if (err && !token)
@@ -246,6 +262,22 @@ export function LiveKitVoiceInput({
       <p style={{ fontSize: 11, opacity: 0.55, marginTop: 6 }}>
         Transcript (interim vs final) — finals POST to <code>/api/voice-input</code>.
       </p>
+      {err ? (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ color: "#f66", fontSize: 12, margin: 0 }}>
+            Voice implant POST failed — Scribe did not receive this line. {err}
+          </p>
+          {failedFinal ? (
+            <button
+              type="button"
+              style={{ ...btn, marginTop: 8, fontSize: 12 }}
+              onClick={() => acceptAndPost(failedFinal, { skipAppend: true })}
+            >
+              Retry last implant
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {mode === "web-speech" ? (
         <>
           <PushToTalkWebSpeech onFinal={onWebSpeechFinal} />
